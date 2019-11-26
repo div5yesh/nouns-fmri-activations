@@ -98,16 +98,15 @@ feat_data = fp.read()
 fp.close()
 
 # %%
-feature_values = []
-feature_name = []
+features = dict()
 words = feat_data.split("\n\n\n")
 for word in words:
     feature = word.split("\n\n")
     value = list(map(lambda x:float(x.split(" ")[1]), sorted(feature[1].split("\n"), key=lambda x: x[0])))
-    feature_name += [feature[0]]
-    feature_values += [value]
+    features[feature[0]] = value
 
-features = np.asarray(feature_values)   #(60, 25)
+# TODO: index map to same feature
+# features = np.asarray(feature_values)   #(60, 25)
 
 # %%
 trial_map = dict()
@@ -117,7 +116,7 @@ for i in range(len(info[0])):
     word_idx = trial['word_number'][0][0]
     word = trial['word'][0]
     key = (condition_idx, word_idx, word)
-    trial_map[key] = trial_map.get(key, []) + [i]
+    trial_map[word] = trial_map.get(word, []) + [i]
 
 # %%
 samples = 360 #len(data)
@@ -127,6 +126,15 @@ for i in range(samples):
 
 mean_image = np.mean(images, axis=0)
 images = images - mean_image
+
+#%%
+X = []
+Y = []
+for key in trial_map:
+    img = trial_map[key]
+    for i in img:
+        X += [features[key]]
+        Y += [images[i]]
 
 #%%
 # TODO: 
@@ -139,8 +147,8 @@ images = images - mean_image
 # use cosine similarity - done
 
 # %%
-X = features
-Y = images
+X = np.asarray(X)
+Y = np.asarray(Y)
 N = len(images)
 split_idx = int(N * .75)
 
@@ -157,3 +165,5 @@ print(reg_model.score(trainX, trainY))
 
 predY = reg_model.predict(testX)
 np.diag(cosine_similarity(testY, predY))
+
+# %%
