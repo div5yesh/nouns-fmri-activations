@@ -5,165 +5,148 @@ from IPython import get_ipython
 get_ipython().run_line_magic('matplotlib', 'inline')
 
 # %%
-from itertools import groupby
+from itertools import groupby, combinations
 import numpy as np
 import scipy.io
 from sklearn.linear_model import LinearRegression
 from sklearn.metrics.pairwise import cosine_similarity
 
 # %%
-mat = scipy.io.loadmat('data-science-P1.mat')
-meta = mat["meta"]
-info = mat["info"]
-data = mat["data"]
+def load_subject_data(idx):
+    mat = scipy.io.loadmat('data-science-P' + str(idx) + '.mat')
+    meta = mat["meta"]
+    info = mat["info"]
+    data = mat["data"]
+    # voxel_map = meta["coordToCol"][0][0]    #(51, 61, 23)
+    # voxel_vec = meta["colToCoord"][0][0]    #(21764, 3)
+    # scan_shape = voxel_map.shape
+    return meta, info, data
 
-# %%
-voxel_map = meta["coordToCol"][0][0]    #(51, 61, 23)
-voxel_vec = meta["colToCoord"][0][0]    #(21764, 3)
-scan_shape = voxel_map.shape
+def prepare_image(scan_shape, data, voxel_map):
+    fmri_image = np.zeros(scan_shape)
+    for i in range(scan_shape[0]):
+        for j in range(scan_shape[1]):
+            for k in range(scan_shape[2]):
+                voxel = voxel_map[i][j][k]
+                fmri_image[i][j][k] = data[voxel - 1]
+    return fmri_image
 
-# %%
-fmri_image = np.zeros(scan_shape)
-# for n in range(10):
-for i in range(scan_shape[0]):
-    for j in range(scan_shape[1]):
-        for k in range(scan_shape[2]):
-            voxel = voxel_map[i][j][k]
-            fmri_image[i][j][k] = data[0,0][0][voxel - 1]
+def show_slices(fmri_image):
+    for i in range(scan_shape[2]):
+        plt.imshow(fmri_image[:,:,i])
+        plt.show()
 
-# %%
-for i in range(scan_shape[2]):
-    plt.imshow(fmri_image[:,:,i])
+def get_trial_info(info):
+    wrd_to_trial = dict()
+    trial_count = len(info[0])
+    trial_to_wrd = []
+    for i in range(len(info[0])):
+        trial = info[0][i]
+        condition_idx = trial['cond_number'][0][0]
+        word_idx = trial['word_number'][0][0]
+        word = trial['word'][0]
+        key = (condition_idx, word_idx, word)
+        wrd_to_trial[word] = wrd_to_trial.get(word, []) + [i]
+        trial_to_wrd += [word]
+    return trial_to_wrd, wrd_to_trial
+
+def get_semantic_features():
+    fp = open("features.txt", "r")
+    feat_data = fp.read()
+    fp.close()
+
+    features = dict()
+    words = feat_data.split("\n\n\n")
+    for word in words:
+        feature = word.split("\n\n")
+        value = list(map(lambda x:float(x.split(" ")[1]), sorted(feature[1].split("\n"), key=lambda x: x[0])))
+        features[feature[0]] = value
+
+    return features
+
+def plot_slices(fmri_image):
+    fig, ax = plt.subplots(nrows=11, ncols=2, figsize=(50,100))
+    idx = 0
+    for row in ax:
+        for col in row:
+            col.imshow(fmri_image[:,:,idx])
+            idx += 1
+    plt.tight_layout()
     plt.show()
 
-# %%
-fig = plt.figure()
-ax = fig.gca(projection='3d')
-ax.voxels(voxel_map, facecolor=[0,0,0])
-plt.show()
+def normalize(data):
+    samples = len(data)
+    images = []
+    for i in range(samples):
+        images += [data.flatten()[i].flatten()]
+
+    images = np.array(images)
+    # mean_image = np.mean(images, axis=0)
+    # images = images - mean_image
+    return images
+
+def selection(image):
+    return image[:]
+
+def match(pred, act):
+    c1 = cosine_similarity(selection(pred[0]), selection(act[1]))
+    c2 = cosine_similarity(selection(pred[1]), selection(act[0]))
+    return c1 + c2
 
 # %%
-fmri_images = np.zeros((1,21764))
-features = np.zeros((1,25))
-weights = fmri_images.T @ features 
+p1_meta, p1_info, p1_data = load_subject_data(1)
+p1_data_flat = normalize(p1_data)
+trial_info, trial_map = get_trial_info(p1_info)
+features = get_semantic_features()
+# X, Y = prepare_data(p1_data, features, trial_info)
 
 # %%
-weights = np.zeros((21764,25))
-features = np.zeros((1,25))
-fmri_images = features @ weights.T
+nouns = set(trial_map.keys())
+test_comb = combinations(nouns, 2)
+iteration = 0
+for test_nouns in test_comb:
+    train_nouns = nouns - set(test_nouns)
 
-# %% [markdown]
-# Snippet for voxel image plot
+    train_features = []
+    image_reps = []
+    for nn in train_nouns:
+        train_features += [features[nn]]
+        image_ids = trial_map[nn]
+        images = []
+        for i in image_ids:
+            img = p1_data_flat[i]
+            images += [img]
 
-# %%
-# prepare some coordinates
-x, y, z = np.indices((8, 8, 8))
+        images = np.array(images)
+        image_rep = np.mean(images, axis=0)
+        image_reps += [image_rep]
 
-# draw cuboids in the top left and bottom right corners, and a link between them
-cube1 = (x < 3) & (y < 3) & (z < 3)
-cube2 = (x >= 5) & (y >= 5) & (z >= 5)
-link = abs(x - y) + abs(y - z) + abs(z - x) <= 2
+    image_reps = np.array(image_reps)
+    mean = np.mean(image_reps, axis=0)
 
-# combine the objects into a single boolean array
-voxels = cube1 | cube2 | link
+    train_features = np.array(train_features)   # 58, 25
+    train_images = image_reps - mean
 
-# set the colors of each object
-colors = np.empty(voxels.shape, dtype=object)
-colors[link] = 'red'
-colors[cube1] = 'blue'
-colors[cube2] = 'green'
+    reg_model = LinearRegression()
+    reg_model.fit(train_features, train_images)
+    
+    # TODO: voxel selection using voxel_map = (21764, 6, 58)
 
-# and plot everything
-fig = plt.figure()
-ax = fig.gca(projection='3d')
-ax.voxels(voxels, facecolors=colors, edgecolor='k')
 
-plt.show()
+    iteration += 1
+    break
 
-# %%
-fig = plt.figure()
-ax = fig.add_subplot(111, projection='3d')
-
-# your real data here - some 3d boolean array
-x, y, z = np.indices((10, 10, 10))
-voxels = (x == y) | (y == z)
-
-ax.voxels(voxels, facecolors=["green"], edgecolor="k")
-
-plt.show() 
+print(iteration)    #1770
 
 # %%
-fp = open("features.txt", "r")
-feat_data = fp.read()
-fp.close()
+p1_voxel_map = p1_meta["coordToCol"][0][0]
+scan_shape = p1_voxel_map.shape
+
+sample_image = prepare_image(scan_shape, predY[0], p1_voxel_map)
+plot_slices(sample_image)
 
 # %%
-features = dict()
-words = feat_data.split("\n\n\n")
-for word in words:
-    feature = word.split("\n\n")
-    value = list(map(lambda x:float(x.split(" ")[1]), sorted(feature[1].split("\n"), key=lambda x: x[0])))
-    features[feature[0]] = value
-
-# TODO: index map to same feature
-# features = np.asarray(feature_values)   #(60, 25)
-
-# %%
-trial_map = dict()
-for i in range(len(info[0])):
-    trial = info[0][i]
-    condition_idx = trial['cond_number'][0][0]
-    word_idx = trial['word_number'][0][0]
-    word = trial['word'][0]
-    key = (condition_idx, word_idx, word)
-    trial_map[word] = trial_map.get(word, []) + [i]
-
-# %%
-samples = 360 #len(data)
-images = np.zeros((samples,21764))    #(360, 21764)
-for i in range(samples):
-    images[i] = data.flatten()[i].flatten()
-
-mean_image = np.mean(images, axis=0)
-images = images - mean_image
-
-#%%
-X = []
-Y = []
-for key in trial_map:
-    img = trial_map[key]
-    for i in img:
-        X += [features[key]]
-        Y += [images[i]]
-
-#%%
-# TODO: 
-# remove mean from images - 
-# predict word from feature vector - 
-# add data points for each of the 360 images - 
-# train on each participant separately - 
-# train on combined data set - 
-# visualize predicted images - 
-# use cosine similarity - done
-
-# %%
-X = np.asarray(X)
-Y = np.asarray(Y)
-N = len(images)
-split_idx = int(N * .75)
-
-trainX = X[:split_idx]
-trainY = Y[:split_idx]
-
-testX = X[split_idx:]
-testY = Y[split_idx:]
-
-#%%
-reg_model = LinearRegression()
-reg_model.fit(trainX, trainY)
-print(reg_model.score(trainX, trainY))
-
-predY = reg_model.predict(testX)
-np.diag(cosine_similarity(testY, predY))
+sample_image = prepare_image(scan_shape, testY[0], p1_voxel_map)
+plot_slices(sample_image)
 
 # %%
