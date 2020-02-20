@@ -1,3 +1,7 @@
 *.mat
 data/
 dataset/
+*.h5
+*.m
+.vscode
+__pycache__
