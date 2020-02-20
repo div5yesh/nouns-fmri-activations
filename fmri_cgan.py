@@ -1,4 +1,11 @@
 #%%
+import os
+os.environ["CUDA_DEVICE_ORDER"]="PCI_BUS_ID"
+ 
+# The GPU id to use, usually either "0" or "1";
+os.environ["CUDA_VISIBLE_DEVICES"]="2"
+
+#%%
 # example of training an conditional gan on the fashion mnist dataset
 from numpy import expand_dims
 from numpy import zeros
@@ -254,7 +261,10 @@ latent_points, labels = generate_latent_points(500, 2)
 # labels = asarray([x for _ in range(10) for x in range(10)])
 # generate images
 X  = model.predict([latent_points, labels])
+# scale from [-1,1] to [0,1]
+# X = (X + 1) / 2.0
 # plot the result
+# save_plot(X, 10)
 show_slices(X[0])
 
 #%%
