@@ -116,9 +116,11 @@ def select(voxels, image):
 
 def match(pred, act):
     similarity = cosine_similarity(pred, act)
-    c1 = similarity[0][1]
-    c2 = similarity[1][0]
-    return c1 + c2
+    #p1i1_p2i2
+    self_match = np.sum(np.diag(similarity))    
+    #p1i2_p2i1
+    cross_match = np.sum(similarity) - self_match
+    return self_match > cross_match
 
 def prepare_data(features, trial_map, data_flat, stimuli):
     semantic_embeds = []
@@ -173,11 +175,6 @@ def train(features, trial_map, data_flat):
     predictions = []
     true_images = []
 
-    # voxel_map = get_voxel_map(trial_map, data_flat, nouns)
-    # snr = calculate_snr(voxel_map)
-    # pickle.dump(snr, open("snr.h5", "wb"))
-    snr = pickle.load(open("snr.h5", "rb"))
-
     for test_nouns in test_combinations:
         train_nouns = nouns - set(test_nouns)
 
@@ -194,27 +191,25 @@ def train(features, trial_map, data_flat):
         true_images += [test_images]
 
         iteration += 1
-        print("Training Combination: %d/%d" % (iteration, 1770))
+        if iteration % 100 == 0:
+            print("Training Combination: %d/%d" % (iteration, 1770))
+            # break
 
-        if iteration == 100:
-            break
-
-    print("Done")    #1770
-    return snr, predictions, true_images
+    return predictions, true_images
 
 def evaluate(snr, predictions, true_images):
     similarity_map = []
+
     for i in range(len(predictions)):
 
         similarity = match(predictions[i] * snr, true_images[i])
         similarity_map += [similarity]
         
-        print('Eval Combination: %d' % (i))
+        # print('Eval Combination: %d' % (i))
 
-    return similarity_map
+    return np.array(similarity_map)
 
-def plot_snr(meta):
-    snr = pickle.load(open("snr.h5", "rb"))
+def plot_snr(meta, snr):
     vmap = meta["coordToCol"][0][0]
     sc = vmap.shape
     image = prepare_image(sc, snr, vmap)
@@ -225,15 +220,26 @@ p1_meta, p1_info, p1_data = load_subject_data(1)
 p1_data_flat = flatten(p1_data)
 trial_info, trial_map = get_trial_info(p1_info)
 features = get_semantic_features()
-plot_snr(p1_meta)
+
+snr = None
+if not os.path.isfile('snr.h5'):
+    voxel_map = get_voxel_map(trial_map, p1_data_flat, set(trial_map.keys()))
+    snr = calculate_snr(voxel_map)
+    pickle.dump(snr, open("snr.h5", "wb"))
+else:
+    snr = pickle.load(open("snr.h5", "rb"))
+
+plot_snr(p1_meta, snr)
 
 # %%
-snr, predictions, true_images = train(features, trial_map, p1_data_flat)
+predictions, true_images = train(features, trial_map, p1_data_flat)
 
 #%%
 similarity = evaluate(snr, predictions, true_images)
+accuracy = sum(similarity * 1)/len(similarity)
+print('Accuracy: %f' % (accuracy))
 
-#%%
+#%% ---------------------------------------------------------------------
 p1_voxel_map = p1_meta["coordToCol"][0][0]
 scan_shape = p1_voxel_map.shape
 
