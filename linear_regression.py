@@ -2,12 +2,11 @@
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 from IPython import get_ipython
-get_ipython().run_line_magic('matplotlib', 'inline')
+# get_ipython().run_line_magic('matplotlib', 'inline')
 
-# %%
 from itertools import groupby, combinations
 import numpy as np
-import scipy.io
+import scipy.io, pickle, os
 from scipy.stats.stats import pearsonr
 from sklearn.linear_model import LinearRegression
 from sklearn.metrics.pairwise import cosine_similarity
@@ -84,6 +83,18 @@ def flatten(data):
     images = np.array(images)
     return images
 
+def get_voxel_map(trial_map, data_flat, stimuli):
+    voxel_map = []
+    
+    for noun in stimuli:
+        image_ids = trial_map[noun]
+        sample_images = data_flat[image_ids]
+        voxel_map += [sample_images]
+
+    voxel_map = np.array(voxel_map).T
+    return voxel_map
+
+
 def find_top500voxels(voxel_map):
     stability_scores = []
     for i in range(len(voxel_map)):
@@ -112,50 +123,67 @@ def match(pred, act):
 def prepare_data(features, trial_map, data_flat, stimuli):
     semantic_embeds = []
     image_representatives = []
-    voxel_map = []
+    
     for noun in stimuli:
         semantic_embeds += [features[noun]]
         image_ids = trial_map[noun]
-        sample_images = []
-        for i in image_ids:
-            image = data_flat[i]
-            sample_images += [image]
-
-        voxel_map += [sample_images]
-        sample_images = np.array(sample_images)
+        sample_images = data_flat[image_ids]
         representative = np.mean(sample_images, axis=0)
         image_representatives += [representative]
 
-    voxel_map = np.array(voxel_map).T
     image_representatives = np.array(image_representatives)
     mean = np.mean(image_representatives, axis=0)
 
     semantic_embeds = np.array(semantic_embeds)   # (N, 25)
     fmri_images = image_representatives - mean  # (N, 21764)
-    return fmri_images, semantic_embeds, voxel_map
+    return fmri_images, semantic_embeds
 
-# %%
-p1_meta, p1_info, p1_data = load_subject_data(1)
-p1_data_flat = flatten(p1_data)
-trial_info, trial_map = get_trial_info(p1_info)
-features = get_semantic_features()
+def calculate_snr(voxel_map):
+    error_v_i_l = np.zeros(voxel_map.shape)
+    error_std = np.zeros(len(voxel_map))
 
-# %%
+    singal_v_l = np.mean(voxel_map,axis=1)
+
+
+    # temp = np.zeros((6,21764,60))
+    # for i in range(6):
+    #     temp[i] = voxel_map[:,0,:] - singal_v_l
+
+    # temp = temp.reshape((21764,6,60))
+
+    for v in range(21764):
+        for l in range(60):
+            for i in range(6):
+                error_v_i_l[v][i][l] = voxel_map[v][i][l] - singal_v_l[v][l]
+
+    error_mean = np.mean(np.mean(error_v_i_l, axis=2),axis=1)
+
+    for v in range(21764):
+        error_std[v] = np.sqrt(np.mean((error_v_i_l[v] - error_mean[v]) ** 2))
+
+    signal_std = np.std(singal_v_l, axis=1)
+
+    snr = signal_std/error_std
+    return snr
+
 def train(features, trial_map, data_flat):
     nouns = set(trial_map.keys())
     test_combinations = combinations(nouns, 2)
     iteration = 0
     predictions = []
     true_images = []
-    training_voxel_map = []
+
+    # voxel_map = get_voxel_map(trial_map, data_flat, nouns)
+    # snr = calculate_snr(voxel_map)
+    # pickle.dump(snr, open("snr.h5", "wb"))
+    snr = pickle.load(open("snr.h5", "rb"))
+
     for test_nouns in test_combinations:
         train_nouns = nouns - set(test_nouns)
 
         # prepare dataset
-        train_images, train_features, voxel_map = prepare_data(features, trial_map, p1_data_flat, train_nouns)
-        test_images, test_features, _ = prepare_data(features, trial_map, p1_data_flat, test_nouns)
-
-        training_voxel_map += [voxel_map]
+        train_images, train_features = prepare_data(features, trial_map, data_flat, train_nouns)
+        test_images, test_features = prepare_data(features, trial_map, data_flat, test_nouns)
 
         # model
         reg_model = LinearRegression()
@@ -172,32 +200,38 @@ def train(features, trial_map, data_flat):
             break
 
     print("Done")    #1770
-    return training_voxel_map, predictions, true_images
+    return snr, predictions, true_images
 
-def evaluate(training_voxel_map, predictions, true_images):
+def evaluate(snr, predictions, true_images):
     similarity_map = []
-    traditional = []
     for i in range(len(predictions)):
-        top500voxels = find_top500voxels(training_voxel_map[i])
 
-        predicted_voxels = select(top500voxels, predictions[i])
-        actual_voxels = select(top500voxels, true_images[i])
-
-        similarity = match(predicted_voxels, actual_voxels)
+        similarity = match(predictions[i] * snr, true_images[i])
         similarity_map += [similarity]
         
-        similarity = cosine_similarity(predicted_voxels, actual_voxels)
-        traditional += [similarity[0][0] + similarity[1][1]]
-
         print('Eval Combination: %d' % (i))
 
-    return similarity_map, traditional
+    return similarity_map
+
+def plot_snr(meta):
+    snr = pickle.load(open("snr.h5", "rb"))
+    vmap = meta["coordToCol"][0][0]
+    sc = vmap.shape
+    image = prepare_image(sc, snr, vmap)
+    plot_slices(image)
 
 # %%
-training_voxel_map, predictions, true_images = train(features, trial_map, p1_data_flat)
+p1_meta, p1_info, p1_data = load_subject_data(1)
+p1_data_flat = flatten(p1_data)
+trial_info, trial_map = get_trial_info(p1_info)
+features = get_semantic_features()
+plot_snr(p1_meta)
+
+# %%
+snr, predictions, true_images = train(features, trial_map, p1_data_flat)
 
 #%%
-similarity, traditional = evaluate(training_voxel_map, predictions, true_images)
+similarity = evaluate(snr, predictions, true_images)
 
 #%%
 p1_voxel_map = p1_meta["coordToCol"][0][0]
@@ -209,5 +243,16 @@ plot_slices(sample_image)
 # %%
 sample_image = prepare_image(scan_shape, true_images[0][0], p1_voxel_map)
 plot_slices(sample_image)
+
+# %%
+
+# fig, ax = plt.subplots(nrows=11, ncols=2, figsize=(50,100))
+# idx = 0
+# for row in ax:
+#     for col in row:
+#         col.imshow(predictions[0][0][:,:,idx])
+#         idx += 1
+# plt.tight_layout()
+# plt.show()
 
 # %%
