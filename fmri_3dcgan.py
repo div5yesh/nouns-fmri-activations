@@ -15,7 +15,7 @@ from numpy.random import randint
 from numpy import asarray
 import numpy as np
 from tensorflow.keras.models import load_model
-from matplotlib import pyplot as plt
+from matplotlib import pyplot
 # from keras.datasets.fashion_mnist import load_data
 from tensorflow.keras.optimizers import Adam
 from tensorflow.keras.models import Model
@@ -24,17 +24,21 @@ from tensorflow.keras.layers import Dense
 from tensorflow.keras.layers import Reshape
 from tensorflow.keras.layers import Flatten
 from tensorflow.keras.layers import Conv2D
+from tensorflow.keras.layers import Conv3D
 from tensorflow.keras.layers import Conv2DTranspose
+from tensorflow.keras.layers import Conv3DTranspose
 from tensorflow.keras.layers import LeakyReLU
 from tensorflow.keras.layers import Dropout
 from tensorflow.keras.layers import Embedding
 from tensorflow.keras.layers import Concatenate
 
 #%%
-from linear_regression import load_subject_data, flatten, get_trial_info, get_semantic_features, prepare_image, show_slices, plot_slices
-p1_meta, p1_info, p1_data = load_subject_data(1)
+from linear_regression import load_subject_data, flatten, get_trial_info, get_semantic_features, prepare_image, show_slices
+participant = 1
+p1_meta, p1_info, p1_data = load_subject_data(participant)
 p1_data_flat = flatten(p1_data)
 trial_info, trial_map = get_trial_info(p1_info)
+features = get_semantic_features()
 p1_voxel_map = p1_meta["coordToCol"][0][0]
 scan_shape = p1_voxel_map.shape
 
@@ -67,10 +71,10 @@ def define_discriminator(in_shape=(51, 61, 23), n_classes=60):
 	# concat label as a channel
 	merge = Concatenate()([in_image, li])
 	# downsample
-	fe = Conv2D(128, (3,3), strides=(2,2), padding='same')(merge)
+	fe = Conv3D(128, (3,3,3), strides=(2,2,2), padding='same')(merge)
 	fe = LeakyReLU(alpha=0.2)(fe)
 	# downsample
-	fe = Conv2D(128, (3,3), strides=(2,2), padding='same')(fe)
+	fe = Conv3D(128, (3,3,3), strides=(2,2,2), padding='same')(fe)
 	fe = LeakyReLU(alpha=0.2)(fe)
 	# flatten feature maps
 	fe = Flatten()(fe)
@@ -83,7 +87,7 @@ def define_discriminator(in_shape=(51, 61, 23), n_classes=60):
 	# compile model
 	opt = Adam(lr=0.0002, beta_1=0.5)
 	model.compile(loss='binary_crossentropy', optimizer=opt, metrics=['accuracy'])
-	# print(model.summary())
+	print(model.summary())
 	return model
 
 # define the standalone generator model
@@ -107,19 +111,19 @@ def define_generator(latent_dim, n_classes=60):
 	# merge image gen and label input
 	merge = Concatenate()([gen, li])
 	# upsample to 14x21
-	gen = Conv2DTranspose(128, (4,4), strides=(2,3), padding='same')(merge)
+	gen = Conv2DTranspose(128, (4,4,4), strides=(2,3), padding='same')(merge)
 	gen = LeakyReLU(alpha=0.2)(gen)
 	# upsample to 28x21
-	gen = Conv2DTranspose(128, (4,4), strides=(2,1), padding='same')(gen)
+	gen = Conv2DTranspose(128, (4,4,4), strides=(2,1), padding='same')(gen)
 	gen = LeakyReLU(alpha=0.2)(gen)
 	# upsample to 56x63
-	gen = Conv2DTranspose(128, (4,4), strides=(2,3), padding='same')(gen)
+	gen = Conv2DTranspose(128, (4,4,4), strides=(2,3), padding='same')(gen)
 	gen = LeakyReLU(alpha=0.2)(gen)
 	# output - 51x51x23
 	out_layer = Conv2D(23, (6,3), strides=(1,1), activation='tanh', padding='valid')(gen)
 	# define model
 	model = Model([in_lat, in_label], out_layer)
-	# print(model.summary())
+	print(model.summary())
 	return model
 
 # define the combined generator and discriminator model, for updating the generator
@@ -224,11 +228,11 @@ gan_model = define_gan(g_model, d_model)
 # load image data
 dataset = load_real_samples()
 # train model
-train(g_model, d_model, gan_model, dataset, latent_dim, 1000)
+# train(g_model, d_model, gan_model, dataset, latent_dim, 10)
 
 #%%
-import tensorflow.compat.v1 as tf
-tf.disable_v2_behavior()
+import tensorflow.compat.v1.compat as tf
+# tf.disable_v2_behavior()
 
 # generate points in latent space as input for the generator
 def generate_latent_points(latent_dim, n_samples, n_classes=60):
@@ -241,16 +245,16 @@ def generate_latent_points(latent_dim, n_samples, n_classes=60):
 	return [z_input, labels]
  
 # create and save a plot of generated images
-# def save_plot(examples, n):
-# 	# plot images
-# 	for i in range(n * n):
-# 		# define subplot
-# 		pyplot.subplot(n, n, 1 + i)
-# 		# turn off axis
-# 		pyplot.axis('off')
-# 		# plot raw pixel data
-# 		pyplot.imshow(examples[i, :, :, 0], cmap='gray_r')
-# 	pyplot.show()
+def save_plot(examples, n):
+	# plot images
+	for i in range(n * n):
+		# define subplot
+		pyplot.subplot(n, n, 1 + i)
+		# turn off axis
+		pyplot.axis('off')
+		# plot raw pixel data
+		pyplot.imshow(examples[i, :, :, 0], cmap='gray_r')
+	pyplot.show()
  
 #%%
 # load model
@@ -263,22 +267,8 @@ latent_points, labels = generate_latent_points(500, 2)
 X  = model.predict([latent_points, labels])
 # scale from [-1,1] to [0,1]
 # X = (X + 1) / 2.0
-
-#%%
-def plot_slices(fmri_image, rows=11, cols=2):
-    fig, ax = plt.subplots(nrows=rows, ncols=cols, figsize=(50,30))
-    idx = 0
-    for row in ax:
-        for col in row:
-            if idx < fmri_image.shape[2]:
-                col.imshow(fmri_image[:,:,idx])
-            idx += 1
-    plt.tight_layout()
-    plt.show()
-	
 # plot the result
 # save_plot(X, 10)
-# show_slices(X[0], scan_shape)
-plot_slices(X[0], 4, 6)
+show_slices(X[0], scan_shape)
 
 #%%
