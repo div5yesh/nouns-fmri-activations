@@ -10,18 +10,6 @@ from utils.visualize import fmriviz
 from utils.preprocess import dataset, preprocess
 
 # %%
-def find_top500voxels(voxel_map):
-    stability_scores = []
-    for i in range(len(voxel_map)):
-        correlation_mat = np.corrcoef(voxel_map[i].T)
-        correlation = (np.sum(correlation_mat) - 58)/2
-        avg_correlation = correlation/1653
-        stability_scores += [avg_correlation]
-
-    stability_scores = np.array(stability_scores)
-    top500 = stability_scores.argsort()[-500:][::-1]
-    return top500
-
 def select(voxels, image):
     img = []
     for i in range(len(image)):
@@ -70,29 +58,32 @@ def train(features, trial_map, data_flat, idx=1):
     # if not os.path.isfile(model_path):
     #     pickle.dump(reg_model, open("rmodel"+str(idx)+".h5", "wb"))
 
-    return predictions, true_images
+    return np.array(predictions), np.array(true_images)
 
 def evaluate(snr, predictions, true_images):
+    print(predictions.shape)
     similarity_map = []
-
+    top500 = preprocess.get_top500_voxels(snr)
     for i in range(len(predictions)):
+        pred = select(top500,predictions[i])
+        true = select(top500,true_images[i])
 
-        similarity = match(predictions[i] * snr, true_images[i])
+        similarity = match(pred, true)
         similarity_map += [similarity]
-        
-        # print('Eval Combination: %d' % (i))
+        print('Eval Combination: %d' % (i))
 
     return np.array(similarity_map)
 
 # %%
-samples = dataset.data[1].samples
-voxel_map = dataset.data[1].voxel_map
-trial_map = dataset.data[1].trial_map
+participant = 1
+samples = dataset.data[participant].samples
+voxel_map = dataset.data[participant].voxel_map
+trial_map = dataset.data[participant].trial_map
 features = dataset.features
-snr = preprocess.get_snr(1, samples, trial_map)
-sample_img = fmriviz.prepare_image(samples[0], voxel_map)
+
+snr = preprocess.get_snr(participant, samples, trial_map)
 snr_img = fmriviz.prepare_image(snr, voxel_map)
-fmriviz.plot_slices(sample_img)
+fmriviz.plot_slices(snr_img, "SNR_P%d" % (participant))
 
 # %%
 predictions, true_images = train(features, trial_map, samples)

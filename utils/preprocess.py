@@ -5,10 +5,11 @@ import scipy.io, pickle, os
 path = os.path.join(os.getcwd(), 'mitchell')
 
 class Data:
-    def __init__(self, samples, voxel_map, trial_map):
+    def __init__(self, samples, voxel_map, trial_map,labels):
         self.samples = samples
         self.voxel_map = voxel_map
         self.trial_map = trial_map
+        self.labels = labels
 
 class DataLoader:
     def __init__(self):
@@ -30,8 +31,8 @@ class DataLoader:
         voxel_map = (subject_meta["colToCoord"][0][0],subject_meta["coordToCol"][0][0])
         samples = self.flatten(subject_data)
         trial_map = self.get_trial_info(subject_info)
-
-        data = Data(samples, voxel_map, trial_map)
+        labels = self.get_labels(subject_info)
+        data = Data(samples, voxel_map, trial_map, labels)
         return data
 
     def flatten(self, data):
@@ -42,6 +43,12 @@ class DataLoader:
 
         images = np.array(images)
         return images
+
+    def get_labels(self, info):
+        labels = info.T[:,0][:]["word"]
+        for i in range(len(info[0])):
+            labels[i] = labels[i][0]
+        return labels
 
     def get_trial_info(self, info):
         word2trial = dict()
@@ -77,6 +84,18 @@ class Preprocessor:
         else:
             snr = pickle.load(open(snr_path, "rb"))
         return snr
+
+    def get_top500_voxels(self,data):
+        # stability_scores = []
+        # for i in range(len(voxel_map)):
+        #     correlation_mat = np.corrcoef(voxel_map[i].T)
+        #     correlation = (np.sum(correlation_mat) - 58)/2
+        #     avg_correlation = correlation/1653
+        #     stability_scores += [avg_correlation]
+
+        # stability_scores = np.array(stability_scores)
+        top500 = np.argsort(data)[-500:][::-1]
+        return top500
 
     def prepare_data(self, features, trial_map, data_flat, stimuli):
         semantic_embeds = []
@@ -123,7 +142,6 @@ class Preprocessor:
             error_std[v] = np.sqrt(np.mean((error_v_i_l[v] - error_mean[v]) ** 2))
 
         signal_std = np.std(singal_v_l, axis=1)
-
         snr = signal_std/error_std
         return snr
 

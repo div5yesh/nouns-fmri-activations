@@ -16,7 +16,6 @@ from numpy import asarray
 import numpy as np
 from tensorflow.keras.models import load_model
 from matplotlib import pyplot as plt
-# from keras.datasets.fashion_mnist import load_data
 from tensorflow.keras.optimizers import Adam
 from tensorflow.keras.models import Model
 from tensorflow.keras.layers import Input
@@ -29,25 +28,33 @@ from tensorflow.keras.layers import LeakyReLU
 from tensorflow.keras.layers import Dropout
 from tensorflow.keras.layers import Embedding
 from tensorflow.keras.layers import Concatenate
+from sklearn import preprocessing
 
 #%%
-from linear_regression import load_subject_data, flatten, get_trial_info, get_semantic_features, prepare_image, show_slices, plot_slices
-p1_meta, p1_info, p1_data = load_subject_data(1)
-p1_data_flat = flatten(p1_data)
-trial_info, trial_map = get_trial_info(p1_info)
-p1_voxel_map = p1_meta["coordToCol"][0][0]
-scan_shape = p1_voxel_map.shape
+from utils.visualize import fmriviz
+from utils.preprocess import dataset, preprocess
 
 #%%
 def load_data():
+	participant = 1
+	samples = dataset.data[participant].samples
+	voxel_map = dataset.data[participant].voxel_map
+	trial_map = dataset.data[participant].trial_map
+	features = dataset.features
+	labels = dataset.data[participant].labels
+
+	le = preprocessing.LabelEncoder()
+	le.fit(labels)
+	Y = le.transform(labels)
+
+	data_flat_mean = np.mean(samples, axis=0)
+	data_flat = samples - data_flat_mean
 	images = []
-	# Y = np.array(list(trial_map.keys()))
-	Y = np.array(list(range(60)))
-	for imglist in trial_map.values():
-		samples = p1_data_flat[imglist]
-		mean = np.mean(samples, axis=0)
-		reshaped_sample = prepare_image(scan_shape, mean, p1_voxel_map)
-		images += [reshaped_sample]
+	print()
+	for raw in data_flat:
+		img = fmriviz.prepare_image(raw, voxel_map)
+		images += [img]
+
 	images = np.array(images)
 	return [images, Y] #(60, 51, 61, 23) (60,)
 
@@ -83,7 +90,7 @@ def define_discriminator(in_shape=(51, 61, 23), n_classes=60):
 	# compile model
 	opt = Adam(lr=0.0002, beta_1=0.5)
 	model.compile(loss='binary_crossentropy', optimizer=opt, metrics=['accuracy'])
-	# print(model.summary())
+	print(model.summary())
 	return model
 
 # define the standalone generator model
@@ -119,7 +126,7 @@ def define_generator(latent_dim, n_classes=60):
 	out_layer = Conv2D(23, (6,3), strides=(1,1), activation='tanh', padding='valid')(gen)
 	# define model
 	model = Model([in_lat, in_label], out_layer)
-	# print(model.summary())
+	print(model.summary())
 	return model
 
 # define the combined generator and discriminator model, for updating the generator
@@ -144,12 +151,6 @@ def load_real_samples():
 	# load dataset
 	trainX, trainy = load_data()
 	print(trainX.shape, trainy.shape)
-	# expand to 3d, e.g. add channels
-	# X = expand_dims(trainX, axis=-1)
-	# convert from ints to floats
-	# X = X.astype('float32')
-	# scale from [0,255] to [-1,1]
-	# X = (X - 127.5) / 127.5
 	return [trainX, trainy]
  
 # select real samples
@@ -207,10 +208,9 @@ def train(g_model, d_model, gan_model, dataset, latent_dim, n_epochs=100, n_batc
 			# update the generator via the discriminator's error
 			g_loss = gan_model.train_on_batch([z_input, labels_input], y_gan)
 			# summarize loss on this batch
-			print('>%d, %d/%d, d1=%.3f, d2=%.3f g=%.3f' %
-				(i+1, j+1, bat_per_epo, d_loss1, d_loss2, g_loss))
+			print('>%d, %d/%d, d1=%.3f, d2=%.3f g=%.3f' % (i+1, j+1, bat_per_epo, d_loss1, d_loss2, g_loss))
 	# save the generator model
-	g_model.save('fmricgan_generator.h5')
+	g_model.save(os.path.join('pretrained','fmricgan_generator.h5'))
 
 #%%
 # size of the latent space
@@ -224,61 +224,23 @@ gan_model = define_gan(g_model, d_model)
 # load image data
 dataset = load_real_samples()
 # train model
-train(g_model, d_model, gan_model, dataset, latent_dim, 1000)
+train(g_model, d_model, gan_model, dataset, latent_dim, 10)
 
 #%%
 import tensorflow.compat.v1 as tf
 tf.disable_v2_behavior()
-
-# generate points in latent space as input for the generator
-def generate_latent_points(latent_dim, n_samples, n_classes=60):
-	# generate points in the latent space
-	x_input = randn(latent_dim * n_samples)
-	# reshape into a batch of inputs for the network
-	z_input = x_input.reshape(n_samples, latent_dim)
-	# generate labels
-	labels = randint(0, n_classes, n_samples)
-	return [z_input, labels]
- 
-# create and save a plot of generated images
-# def save_plot(examples, n):
-# 	# plot images
-# 	for i in range(n * n):
-# 		# define subplot
-# 		pyplot.subplot(n, n, 1 + i)
-# 		# turn off axis
-# 		pyplot.axis('off')
-# 		# plot raw pixel data
-# 		pyplot.imshow(examples[i, :, :, 0], cmap='gray_r')
-# 	pyplot.show()
  
 #%%
 # load model
-model = load_model('fmricgan_generator.h5')
+model = load_model(os.path.join('pretrained','fmricgan_generator.h5'))
 # generate images
 latent_points, labels = generate_latent_points(500, 2)
 # specify labels
 # labels = asarray([x for _ in range(10) for x in range(10)])
 # generate images
 X  = model.predict([latent_points, labels])
-# scale from [-1,1] to [0,1]
-# X = (X + 1) / 2.0
 
 #%%
-def plot_slices(fmri_image, rows=11, cols=2):
-    fig, ax = plt.subplots(nrows=rows, ncols=cols, figsize=(50,30))
-    idx = 0
-    for row in ax:
-        for col in row:
-            if idx < fmri_image.shape[2]:
-                col.imshow(fmri_image[:,:,idx])
-            idx += 1
-    plt.tight_layout()
-    plt.show()
-	
-# plot the result
-# save_plot(X, 10)
-# show_slices(X[0], scan_shape)
-plot_slices(X[0], 4, 6)
+fmriviz.plot_slices(X[0], "2dconvtest")
 
 #%%
