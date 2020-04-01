@@ -4,27 +4,11 @@ import numpy as np
 import scipy.io, pickle, os
 from scipy.stats.stats import pearsonr
 from sklearn.linear_model import LinearRegression
-from sklearn.metrics.pairwise import cosine_similarity
 
 from utils.visualize import fmriviz
-from utils.preprocess import dataset, preprocess
+from utils.preprocess import dataset, preprocess, postprocess
 
 # %%
-def select(voxels, image):
-    img = []
-    for i in range(len(image)):
-        img += [image[i,:][voxels]]
-
-    return np.array(img)
-
-def match(pred, act):
-    similarity = cosine_similarity(pred, act)
-    #p1i1_p2i2
-    self_match = np.sum(np.diag(similarity))    
-    #p1i2_p2i1
-    cross_match = np.sum(similarity) - self_match
-    return self_match > cross_match
-
 def train(features, trial_map, data_flat, idx=1):
     nouns = set(trial_map.keys())
     test_combinations = combinations(nouns, 2)
@@ -60,20 +44,6 @@ def train(features, trial_map, data_flat, idx=1):
 
     return np.array(predictions), np.array(true_images)
 
-def evaluate(snr, predictions, true_images):
-    print(predictions.shape)
-    similarity_map = []
-    top500 = preprocess.get_top500_voxels(snr)
-    for i in range(len(predictions)):
-        pred = select(top500,predictions[i])
-        true = select(top500,true_images[i])
-
-        similarity = match(pred, true)
-        similarity_map += [similarity]
-        print('Eval Combination: %d' % (i))
-
-    return np.array(similarity_map)
-
 # %%
 participant = 1
 samples = dataset.data[participant].samples
@@ -89,7 +59,7 @@ fmriviz.plot_slices(snr_img, "SNR_P%d" % (participant))
 predictions, true_images = train(features, trial_map, samples)
 
 #%%
-similarity = evaluate(snr, predictions, true_images)
+similarity = postprocess.evaluate(snr, predictions, true_images)
 accuracy = sum(similarity * 1)/len(similarity)
 print('Accuracy: %f' % (accuracy))
 

@@ -16,7 +16,7 @@ class Visualization:
             for j in range(col):
                 for k in range(axis):
                     voxel = coord2col[i][j][k]
-                    if 0 < voxel < len(data): fmri_image[i][j][k] = data[voxel]
+                    if 0 <= voxel < len(data): fmri_image[i][j][k] = data[voxel - 1]
         return fmri_image
 
     # def prepare_image(self, data, voxel_map):

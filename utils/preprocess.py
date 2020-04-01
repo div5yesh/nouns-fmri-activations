@@ -1,6 +1,7 @@
 #%%
 import numpy as np
 import scipy.io, pickle, os
+from sklearn.metrics.pairwise import cosine_similarity
 
 path = os.path.join(os.getcwd(), 'mitchell')
 
@@ -85,18 +86,6 @@ class Preprocessor:
             snr = pickle.load(open(snr_path, "rb"))
         return snr
 
-    def get_top500_voxels(self,data):
-        # stability_scores = []
-        # for i in range(len(voxel_map)):
-        #     correlation_mat = np.corrcoef(voxel_map[i].T)
-        #     correlation = (np.sum(correlation_mat) - 58)/2
-        #     avg_correlation = correlation/1653
-        #     stability_scores += [avg_correlation]
-
-        # stability_scores = np.array(stability_scores)
-        top500 = np.argsort(data)[-500:][::-1]
-        return top500
-
     def prepare_data(self, features, trial_map, data_flat, stimuli):
         semantic_embeds = []
         image_representatives = []
@@ -145,6 +134,42 @@ class Preprocessor:
         snr = signal_std/error_std
         return snr
 
+class Evaluation:
+    def correlation(self, data):
+        stability_scores = []
+        # for i in range(len(voxel_map)):
+        #     correlation_mat = np.corrcoef(voxel_map[i].T)
+        #     correlation = (np.sum(correlation_mat) - 58)/2
+        #     avg_correlation = correlation/1653
+        #     stability_scores += [avg_correlation]
+
+        # stability_scores = np.array(stability_scores)
+
+    def get_top_voxels(self,data,top):
+        topvoxels = np.argsort(data)[-top:][::-1]
+        return topvoxels
+
+    def evaluate(self, snr, predictions, true_images, top=500):
+        similarity_map = []
+        topvoxels = self.get_top_voxels(snr, top)
+        predictions = predictions[:,:,topvoxels]
+        true_images = true_images[:,:,topvoxels]
+        for i in range(len(predictions)):
+            similarity = self.match2(predictions[i], true_images[i])
+            similarity_map += [similarity]
+            print('Eval Combination: %d' % (i))
+
+        return np.array(similarity_map)
+
+    def match2(self, pred, act):
+        similarity = cosine_similarity(pred, act)
+        #p1i1_p2i2
+        self_match = np.sum(np.diag(similarity))    
+        #p1i2_p2i1
+        cross_match = np.sum(similarity) - self_match
+        return self_match > cross_match
+
+postprocess = Evaluation()
 preprocess = Preprocessor()
 dataset = DataLoader()
 
