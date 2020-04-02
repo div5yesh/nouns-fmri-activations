@@ -169,6 +169,17 @@ class Evaluation:
         cross_match = np.sum(similarity) - self_match
         return self_match > cross_match
 
+    def img2vector(self, fmri_image, voxel_map):
+        (col2coord, coord2col) = voxel_map
+        data = np.zeros(col2coord.shape[0])
+        row, col, axis = coord2col.shape
+        for i in range(row):
+            for j in range(col):
+                for k in range(axis):
+                    voxel = coord2col[i][j][k]
+                    if 0 <= voxel < len(data): data[voxel - 1] = fmri_image[i][j][k]
+        return data
+
 postprocess = Evaluation()
 preprocess = Preprocessor()
 dataset = DataLoader()

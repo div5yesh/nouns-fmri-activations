@@ -3,4 +3,5 @@ data/
 dataset/
 *.m
 .vscode
+*.pdf
 __pycache__

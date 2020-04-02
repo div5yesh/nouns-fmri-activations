@@ -9,7 +9,6 @@ class Visualization:
     # row = sagittal; col = coronal; z,slice = horizontal, axial
     def prepare_image(self, data, voxel_map):
         (col2coord, coord2col) = voxel_map
-        vmin = -np.max(data) - 1
         fmri_image = np.full(coord2col.shape,0,dtype=float)
         row, col, axis = coord2col.shape
         for i in range(row):
@@ -62,7 +61,6 @@ class Visualization:
                         or changed_image.get_clim() != im.get_clim()):
                     im.set_cmap(changed_image.get_cmap())
                     im.set_clim(changed_image.get_clim())
-
 
         for im in images:
             im.callbacksSM.connect('changed', update)
