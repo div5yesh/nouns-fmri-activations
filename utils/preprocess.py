@@ -152,14 +152,10 @@ class Evaluation:
     def evaluate(self, snr, predictions, true_images, top=500):
         similarity_map = []
         topvoxels = self.get_top_voxels(snr, top)
-        predictions = predictions[:,:,topvoxels]
-        true_images = true_images[:,:,topvoxels]
-        for i in range(len(predictions)):
-            similarity = self.match2(predictions[i], true_images[i])
-            similarity_map += [similarity]
-            print('Eval Combination: %d' % (i))
-
-        return np.array(similarity_map)
+        print(topvoxels.shape)
+        predictions = predictions[:,topvoxels]
+        true_images = true_images[:,topvoxels]
+        return self.match2(predictions, true_images)
 
     def match2(self, pred, act):
         similarity = cosine_similarity(pred, act)
@@ -182,6 +178,6 @@ class Evaluation:
 
 postprocess = Evaluation()
 preprocess = Preprocessor()
-dataset = DataLoader()
+dataloader = DataLoader()
 
 # %%
