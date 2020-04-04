@@ -77,12 +77,12 @@ class Preprocessor:
     def get_snr(self, idx, samples, trial_map):
         snr = None
         snr_path = os.path.join(os.getcwd(),'snr','snr%d.h5' % (idx))
-        print(snr_path)
         if not os.path.isfile(snr_path):
             groups = self.get_grouped_samples(trial_map, samples)
             snr = self.calculate_snr(groups.T)
             pickle.dump(snr, open(snr_path, "wb"))
         else:
+            print(snr_path)
             snr = pickle.load(open(snr_path, "rb"))
         return snr
 
@@ -150,9 +150,7 @@ class Evaluation:
         return topvoxels
 
     def evaluate(self, snr, predictions, true_images, top=500):
-        similarity_map = []
         topvoxels = self.get_top_voxels(snr, top)
-        print(topvoxels.shape)
         predictions = predictions[:,topvoxels]
         true_images = true_images[:,topvoxels]
         return self.match2(predictions, true_images)

@@ -6,7 +6,7 @@ from scipy.stats.stats import pearsonr
 from sklearn.linear_model import LinearRegression
 
 from utils.visualize import fmriviz
-from utils.preprocess import dataset, preprocess, postprocess
+from utils.preprocess import dataloader, preprocess, postprocess
 
 # %%
 def train(features, trial_map, data_flat, idx=1):
@@ -38,37 +38,55 @@ def train(features, trial_map, data_flat, idx=1):
             print("Training Combination: %d/%d" % (iteration, 1770))
             # break
 
-    # model_path = os.path.join(os.getcwd(), 'pretrained', 'rmodel%d.h5'%(idx))
-    # if not os.path.isfile(model_path):
-    #     pickle.dump(reg_model, open("rmodel"+str(idx)+".h5", "wb"))
-
     return np.array(predictions), np.array(true_images)
 
-# %%
-participant = 1
-samples = dataset.data[participant].samples
-voxel_map = dataset.data[participant].voxel_map
-trial_map = dataset.data[participant].trial_map
-features = dataset.features
+def test(snr, predictions, true_images):
+    arr_similarity = []
+    for i in range(len(predictions)):
+        similarity = postprocess.evaluate(snr, predictions[i], true_images[i])
+        arr_similarity += [similarity]
 
-snr = preprocess.get_snr(participant, samples, trial_map)
-snr_img = fmriviz.prepare_image(snr, voxel_map)
-fmriviz.plot_slices(snr_img, "SNR_P%d" % (participant))
+    accuracy = sum(arr_similarity * 1)/len(arr_similarity)
+    print('Accuracy: %f' % (accuracy))
 
-# %%
-predictions, true_images = train(features, trial_map, samples)
+# %% ---------------------- train-------------------------------------------
+all_pairs = []
+for i in range(1,10):
+    participant = i
+    samples = dataloader.data[participant].samples
+    voxel_map = dataloader.data[participant].voxel_map
+    trial_map = dataloader.data[participant].trial_map
+    features = dataloader.features
 
-#%%
-similarity = postprocess.evaluate(snr, predictions, true_images)
-accuracy = sum(similarity * 1)/len(similarity)
-print('Accuracy: %f' % (accuracy))
+    print("Participant: %d" % (participant))
+    predictions, true_images = train(features, trial_map, samples)
+    all_pairs += [[predictions,true_images]]
+
+# %% ---------------------- test-------------------------------------------
+for i in range(1,10):
+    participant = i
+    samples = dataloader.data[participant].samples
+    voxel_map = dataloader.data[participant].voxel_map
+    trial_map = dataloader.data[participant].trial_map
+
+    print("Participant: %d" % (participant))
+    snr = preprocess.get_snr(participant, samples, trial_map)
+    print(snr.shape)
+    # snr_img = fmriviz.prepare_image(snr, voxel_map)
+    # fmriviz.plot_slices(snr_img, "SNR_P%d" % (participant))
+
+    predictions = all_pairs[participant-1][0]
+    true_images = all_pairs[participant-1][1]
+    test(snr, predictions, true_images)
 
 #%% ---------------------------------------------------------------------
-sample_image = fmriviz.prepare_image(predictions[0][0], voxel_map)
+p1_gen = all_pairs[0][0][0,0]
+p1_real = all_pairs[0][1][0,0]
+sample_image = fmriviz.prepare_image(p1_gen, voxel_map)
 fmriviz.plot_slices(sample_image)
 
 # %%
-sample_image = fmriviz.prepare_image(true_images[0][0], voxel_map)
+sample_image = fmriviz.prepare_image(p1_real, voxel_map)
 fmriviz.plot_slices(sample_image)
 
 # %%
