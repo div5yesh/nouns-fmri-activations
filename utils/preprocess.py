@@ -170,8 +170,8 @@ class Evaluation:
         for i in range(row):
             for j in range(col):
                 for k in range(axis):
-                    voxel = coord2col[i][j][k]
-                    if 0 <= voxel < len(data): data[voxel - 1] = fmri_image[i][j][k]
+                    voxel = coord2col[i][j][k] - 1
+                    if 0 <= voxel < len(data): data[voxel] = fmri_image[i][j][k]
         return data
 
 postprocess = Evaluation()
