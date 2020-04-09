@@ -33,14 +33,14 @@ class Visualization:
             plt.imshow(fmri_image[:,:,i])
             plt.show()
 
-    def plot_slices(self, fmri_image, filename=None, rows=4, cols=6):
+    def plot_slices(self, fmri_image, filename=None, size=(50,30), rows=4, cols=6, cmap="jet"):
         if not filename: filename = randint(0,10000000)
-        fig=plt.figure(figsize=(50, 30))
+        fig=plt.figure(figsize=size)
 
         images = []
         for idx in range(fmri_image.shape[2]):
             fig.add_subplot(rows, cols, idx+1)
-            img = plt.imshow(fmri_image[:,:,idx].T, cmap='jet')
+            img = plt.imshow(fmri_image[:,:,idx].T, cmap=cmap)
             images += [img]
             # fig.colorbar(img)
 
@@ -68,7 +68,7 @@ class Visualization:
         # fig.subplots_adjust(right=0.8)
         # cbar_ax = fig.add_axes([0.82, 0.15, 0.01, 0.7])
         # fig.colorbar(img, cax=cbar_ax)
-        plt.savefig("%s.pdf" % (filename))
+        plt.savefig("%s.pdf" % (filename), bbox_inches = 'tight', pad_inches=0)
         plt.show()
 
 fmriviz = Visualization()

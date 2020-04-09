@@ -90,3 +90,17 @@ sample_image = fmriviz.prepare_image(p1_real, voxel_map)
 fmriviz.plot_slices(sample_image)
 
 # %%
+top500 = postprocess.get_top_voxels(snr,500)
+binary = np.full(snr.shape, 0.2)
+binary[top500] = 1
+snr_binimg = fmriviz.prepare_image(binary, voxel_map)
+fmriviz.plot_slices(snr_binimg, "SNR_bin_P%d" % (participant), cmap="gray_r")
+
+# %%
+top500 = postprocess.get_top_voxels(snr,1000)
+binary = np.full(snr.shape, 0.2)
+binary[top500] = 1
+snr_binimg = fmriviz.prepare_image(binary, voxel_map)
+fmriviz.plot_slices(snr_binimg, "SNR_bin1k_P%d" % (participant), cmap="gray_r")
+
+# %%

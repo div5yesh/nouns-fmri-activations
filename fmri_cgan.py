@@ -32,16 +32,16 @@ from sklearn import preprocessing
 
 #%%
 from utils.visualize import fmriviz
-from utils.preprocess import dataset, preprocess
+from utils.preprocess import dataloader, preprocess, postprocess
 
 #%%
 def load_data():
 	participant = 1
-	samples = dataset.data[participant].samples
-	voxel_map = dataset.data[participant].voxel_map
-	trial_map = dataset.data[participant].trial_map
-	features = dataset.features
-	labels = dataset.data[participant].labels
+	samples = dataloader.data[participant].samples
+	voxel_map = dataloader.data[participant].voxel_map
+	trial_map = dataloader.data[participant].trial_map
+	features = dataloader.features
+	labels = dataloader.data[participant].labels
 
 	le = preprocessing.LabelEncoder()
 	le.fit(labels)
