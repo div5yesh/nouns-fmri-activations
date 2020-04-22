@@ -137,13 +137,25 @@ class Preprocessor:
 class Evaluation:
     def correlation(self, data):
         stability_scores = []
-        # for i in range(len(voxel_map)):
-        #     correlation_mat = np.corrcoef(voxel_map[i].T)
-        #     correlation = (np.sum(correlation_mat) - 58)/2
-        #     avg_correlation = correlation/1653
-        #     stability_scores += [avg_correlation]
+        for i in range(len(data)):
+            correlation_mat = np.corrcoef(data[i].T)
+            correlation = (np.sum(correlation_mat) - 60)/2
+            avg_correlation = correlation/1771
+            stability_scores += [avg_correlation]
 
-        # stability_scores = np.array(stability_scores)
+        stability_scores = np.array(stability_scores)
+        return stability_scores
+
+    def correlation2(self, data):
+        stability_scores = []
+        for i in range(len(data)):
+            correlation_mat = np.corrcoef(data[i])
+            correlation = (np.sum(correlation_mat) - 6)/2
+            avg_correlation = correlation/15
+            stability_scores += [avg_correlation]
+
+        stability_scores = np.array(stability_scores)
+        return stability_scores
 
     def get_top_voxels(self,data,top):
         topvoxels = np.argsort(data)[-top:][::-1]
@@ -155,13 +167,21 @@ class Evaluation:
         true_images = true_images[:,topvoxels]
         return self.match2(predictions, true_images)
 
+    def classic_eval(self, snr, predictions, true_images, threshold=0.7, top=500):
+        topvoxels = self.get_top_voxels(snr, top)
+        # snr_weight = snr[topvoxels]
+        predictions = predictions[topvoxels].reshape(1,-1)
+        true_images = true_images[topvoxels].reshape(1,-1)
+        return cosine_similarity(predictions, true_images)[0][0]
+
     def match2(self, pred, act):
         similarity = cosine_similarity(pred, act)
         #p1i1_p2i2
         self_match = np.sum(np.diag(similarity))    
         #p1i2_p2i1
         cross_match = np.sum(similarity) - self_match
-        return self_match > cross_match
+        return [similarity[0][0], similarity[1][1]]
+        # return self_match > cross_match
 
     def img2vector(self, fmri_image, voxel_map):
         (col2coord, coord2col) = voxel_map

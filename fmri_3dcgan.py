@@ -1,11 +1,14 @@
-#%%
+# To add a new cell, type '# %%'
+# To add a new markdown cell, type '# %% [markdown]'
+# %%
 import os
 os.environ["CUDA_DEVICE_ORDER"]="PCI_BUS_ID"
  
 # The GPU id to use, usually either "0" or "1";
 os.environ["CUDA_VISIBLE_DEVICES"]="0"
 
-#%%
+
+# %%
 # example of training an conditional gan on the fashion mnist dataset
 from numpy import expand_dims
 from numpy import zeros
@@ -22,63 +25,46 @@ from tensorflow.keras.layers import Input
 from tensorflow.keras.layers import Dense
 from tensorflow.keras.layers import Reshape
 from tensorflow.keras.layers import Flatten
-from tensorflow.keras.layers import Conv2D
-from tensorflow.keras.layers import Conv2DTranspose
+from tensorflow.keras.layers import Conv3D
+from tensorflow.keras.layers import Conv3DTranspose
 from tensorflow.keras.layers import LeakyReLU
 from tensorflow.keras.layers import Dropout
 from tensorflow.keras.layers import Embedding
 from tensorflow.keras.layers import Concatenate
 from sklearn import preprocessing
 from sklearn.metrics.pairwise import cosine_similarity
+np.set_printoptions(suppress=True)
 
-#%%
+
+# %%
 from utils.visualize import fmriviz
 from utils.preprocess import dataloader, preprocess, postprocess
 
-#%%
-def load_data():
-	participant = 1
-	samples = dataloader.data[participant].samples
-	voxel_map = dataloader.data[participant].voxel_map
-	trial_map = dataloader.data[participant].trial_map
-	features = dataloader.features
-	labels = dataloader.data[participant].labels
 
-	le = preprocessing.LabelEncoder()
-	le.fit(labels)
-	Y = le.transform(labels)
-
-	data_flat_mean = np.mean(samples, axis=0)
-	data_flat = samples - data_flat_mean
-	images = []
-	print()
-	for raw in data_flat:
-		img = fmriviz.prepare_image(raw, voxel_map)
-		images += [img]
-
-	images = np.array(images)
-	return [images, Y] #(60, 51, 61, 23) (60,)
-
+# %%
 # define the standalone discriminator model
-def define_discriminator(in_shape=(51, 61, 23), n_classes=60):
+def define_discriminator(in_shape=(51, 61, 23, 1), n_classes=60):
 	# label input
 	in_label = Input(shape=(1,))
 	# embedding for categorical input
 	li = Embedding(n_classes, 50)(in_label)
 	# scale up to image dimensions with linear activation
-	n_nodes = in_shape[0] * in_shape[1]
+	n_nodes = in_shape[0] * in_shape[1] * in_shape[2]
 	li = Dense(n_nodes)(li)
 	# reshape to additional channel
-	li = Reshape((in_shape[0], in_shape[1], 1))(li)
+	li = Reshape((in_shape[0], in_shape[1], in_shape[2], 1))(li)
 	# image input
 	in_image = Input(shape=in_shape)
 	# concat label as a channel
 	merge = Concatenate()([in_image, li])
 	# downsample
-	fe = Conv2D(128, (3,3), strides=(2,2), padding='same')(merge)
+	fe = Conv3D(32, (3,3,3), strides=(2,2,2), padding='same')(merge)
 	fe = LeakyReLU(alpha=0.2)(fe)
 	# downsample
-	fe = Conv2D(128, (3,3), strides=(2,2), padding='same')(fe)
+	fe = Conv3D(64, (3,3,3), strides=(2,2,2), padding='same')(fe)
+	fe = LeakyReLU(alpha=0.2)(fe)
+	# downsample
+	fe = Conv3D(128, (3,3,3), strides=(2,2,2), padding='same')(fe)
 	fe = LeakyReLU(alpha=0.2)(fe)
 	# flatten feature maps
 	fe = Flatten()(fe)
@@ -101,30 +87,30 @@ def define_generator(latent_dim, n_classes=60):
 	# embedding for categorical input
 	li = Embedding(n_classes, 50)(in_label)
 	# linear multiplication
-	n_nodes = 7 * 7
+	n_nodes = 7 * 7 * 7
 	li = Dense(n_nodes)(li)
 	# reshape to additional channel
-	li = Reshape((7, 7, 1))(li)
+	li = Reshape((7, 7, 7, 1))(li)
 	# image generator input
 	in_lat = Input(shape=(latent_dim,))
 	# foundation for 7x7 image
-	n_nodes = 128 * 7 * 7
+	n_nodes = 128 * 7 * 7 * 7
 	gen = Dense(n_nodes)(in_lat)
 	gen = LeakyReLU(alpha=0.2)(gen)
-	gen = Reshape((7, 7, 128))(gen)
+	gen = Reshape((7, 7, 7, 128))(gen)
 	# merge image gen and label input
 	merge = Concatenate()([gen, li])
 	# upsample to 14x21
-	gen = Conv2DTranspose(128, (4,4), strides=(2,3), padding='same')(merge)
+	gen = Conv3DTranspose(128, (3,3,3), strides=(2,3,1), padding='same')(merge)
 	gen = LeakyReLU(alpha=0.2)(gen)
-	# upsample to 28x21
-	gen = Conv2DTranspose(128, (4,4), strides=(2,1), padding='same')(gen)
+	# # upsample to 28x21
+	gen = Conv3DTranspose(128, (3,3,3), strides=(2,1,2), padding='same')(gen)
 	gen = LeakyReLU(alpha=0.2)(gen)
-	# upsample to 56x63
-	gen = Conv2DTranspose(128, (4,4), strides=(2,3), padding='same')(gen)
+	# # upsample to 56x63
+	gen = Conv3DTranspose(128, (3,3,3), strides=(2,3,2), padding='same')(gen)
 	gen = LeakyReLU(alpha=0.2)(gen)
 	# output - 51x51x23
-	out_layer = Conv2D(23, (6,3), strides=(1,1), activation='tanh', padding='valid')(gen)
+	out_layer = Conv3D(1, (6,3,6), strides=(1,1,1), activation='tanh', padding='valid')(gen)
 	# define model
 	model = Model([in_lat, in_label], out_layer)
 	print(model.summary())
@@ -146,13 +132,6 @@ def define_gan(g_model, d_model):
 	opt = Adam(lr=0.0002, beta_1=0.5)
 	model.compile(loss='binary_crossentropy', optimizer=opt)
 	return model
-
-# load fashion mnist images
-def load_real_samples():
-	# load dataset
-	trainX, trainy = load_data()
-	print(trainX.shape, trainy.shape)
-	return [trainX, trainy]
  
 # select real samples
 def generate_real_samples(dataset, n_samples):
@@ -211,34 +190,38 @@ def train(g_model, d_model, gan_model, dataset, latent_dim, n_epochs=100, n_batc
 			# summarize loss on this batch
 			print('>%d, %d/%d, d1=%.3f, d2=%.3f g=%.3f' % (i+1, j+1, bat_per_epo, d_loss1, d_loss2, g_loss))
 	# save the generator model
-	g_model.save(os.path.join('pretrained','fmricgan_2d1k.h5'))
+	g_model.save(os.path.join('pretrained','fmri3dcgan_1k.h5'))
 
-#%%
-# size of the latent space
-latent_dim = 500
-# create the discriminator
-d_model = define_discriminator()
-# create the generator
-g_model = define_generator(latent_dim)
-# create the gan
-gan_model = define_gan(g_model, d_model)
-# load image data
-dataset = load_real_samples()
-# train model
-train(g_model, d_model, gan_model, dataset, latent_dim, 10)
-
-#%%
-# load model
-model = load_model(os.path.join('pretrained','fmricgan_2d1k.h5'))
-
-#%%
 # generate images
-latent_points, labels = generate_latent_points(500, 2)
-# generate images
-X  = model.predict([latent_points, labels])
+def generate_pred_pairs(model):
+    latent_points, labels = generate_latent_points(1000, 2)
+    X  = model.predict([latent_points, labels])
+    predictions = X[:,:,:,:,0]
+    return predictions, labels
 
-#%%
-fmriviz.plot_slices(X[0], "2dconvtest")
+# test and calculate accuracy
+def test(snr, predictions, true_images):
+    arr_similarity = []
+    for i in range(len(predictions)):
+        similarity = postprocess.evaluate(snr, predictions[i], true_images[i])
+        arr_similarity += [similarity]
+
+    accuracy = sum(arr_similarity * 1)/len(arr_similarity)
+    print('Accuracy: %f' % (accuracy))
+    return arr_similarity
+
+def load_real_samples(samples, voxel_map):
+	images = []
+	data_flat_mean = np.mean(samples, axis=0)
+	data_flat = samples - data_flat_mean
+	for raw in data_flat:
+		img = fmriviz.prepare_image(raw, voxel_map)
+		images += [img]
+
+	images = np.array(images)
+	X = expand_dims(images, axis=-1)
+	return X #(60, 51, 61, 23) (60,)
+
 
 # %%
 participant = 1
@@ -248,33 +231,99 @@ trial_map = dataloader.data[participant].trial_map
 features = dataloader.features
 labels = dataloader.data[participant].labels
 
-keys = list(sorted(features.keys()))
-embeddings = np.array(list(map(lambda x: features[x], keys)))
-
 lencoder = preprocessing.LabelEncoder()
 lencoder.fit(labels)
 Y = lencoder.transform(labels)
 
-#%%
-train_vecs, embeds = preprocess.prepare_data(features,trial_map,samples,list(trial_map.keys()))
 
+# %%
+# size of the latent space
+latent_dim = 1000
+# create the discriminator
+d_model = define_discriminator()
+# create the generator
+g_model = define_generator(latent_dim)
+# create the gan
+gan_model = define_gan(g_model, d_model)
+# load image data
+trainX = load_real_samples(samples, voxel_map)
+dataset = [trainX, Y]
+# train model
+# train(g_model, d_model, gan_model, dataset, latent_dim, 1000)
+
+# %%
+def transform_fake_images(fake, voxel_map):
+    predictions = []
+    for img in fake:
+        vector = postprocess.img2vector(img, voxel_map)
+        predictions += [vector]
+    return np.array(predictions)
+
+# load model
+model = load_model(os.path.join('pretrained','fmri3dcgan_1k.h5'))
+snr = preprocess.get_snr(participant, samples, trial_map)
+
+#%%
+all_predictions = []
+for i in range(100):
+    fake_images, predy = generate_pred_pairs(model)
+    predictions = transform_fake_images(fake_images, voxel_map)
+    true_images = samples[predy]
+#     print(lencoder.inverse_transform(predy))
+
+    all_predictions += [[predictions, true_images]]
+
+all_predictions = np.array(all_predictions)
+
+
+# %%
+asimtemp = test(snr, all_predictions[:,0], all_predictions[:,1])
+
+
+# %%
+fmriviz.plot_slices(fake_images[0], '3dconvtest1000')
+thevec = postprocess.img2vector(fake_images[0],voxel_map)
+theimg = fmriviz.prepare_image(thevec, voxel_map)
+fmriviz.plot_slices(theimg, '3dconvtest1000_remapped')
+fmriviz.plot_slices(trainX[predy[0],:,:,:,0])
+
+
+# %%
+cosine_similarity(fake_images[0].reshape(1,-1), theimg.reshape(1,-1))
+
+
+# %%
+cosine_similarity(trainX[predy[0],:,:,:,0].reshape(1,-1), theimg.reshape(1,-1))
+
+
+# %%
+cosine_similarity(thevec.reshape(1,-1), samples[predy[0]].reshape(1,-1))
+
+
+# %%
+top = postprocess.get_top_voxels(samples[predy[0]],500)
+cosine_similarity(thevec[top].reshape(1,-1), samples[predy[0]][top].reshape(1,-1))
+
+
+# %%
+top = postprocess.get_top_voxels(snr,500)
+cosine_similarity((thevec * snr)[top].reshape(1,-1), samples[predy[0]][top].reshape(1,-1))
 
 #%%
 nouns = list(trial_map.keys())
 y_Bar = lencoder.transform(nouns)
 
 predictions = np.zeros((1,51,61,23))
-latent_points, _ = generate_latent_points(500, len(y_Bar))
+latent_points, _ = generate_latent_points(1000, len(y_Bar))
 
 for i in range(6):
 	start = i * 10
 	end = (i + 1) * 10
 	X  = model.predict([latent_points[start:end], y_Bar[start:end]])
-	fake_images = X[:,:,:,:]
+	fake_images = X[:,:,:,:,0]
 	predictions = np.concatenate((predictions, fake_images), axis=0)
 
 predictions = predictions[1:]
-true_vecs = train_vecs[y_Bar]
 
 #%%
 vol_match = []
@@ -286,40 +335,5 @@ for pred in predictions:
 match = sum(vol_match * 1)/len(vol_match)
 print('Volume Match: %f' % (match))
 
-# %%
-vmin = np.min(true_vecs[0])
-vmax = np.max(true_vecs[0])
-
-vec = postprocess.img2vector(predictions[0], voxel_map)
-img = fmriviz.prepare_image(vec, voxel_map, vmin)
-fmriviz.plot_slices(img, vmin, vmax)
-
-genimg = predictions[1]
-
-for i in range(genimg.shape[0]):
-	for j in range(genimg.shape[1]):
-		for k in range(genimg.shape[2]):
-			if -0.05 < genimg[i][j][k] < 0.05:
-				genimg[i][j][k] = vmin
-
-# theimg = fmriviz.prepare_image(predictions[0], voxel_map, fill=vmin)
-fmriviz.plot_slices(genimg, vmin, vmax)
-
-# tvox = postprocess.get_top_voxels(predictions[0], 500)
-# binary = np.full(true_vecs[0].shape, -0.2)
-# binary[tvox] = 1
-
-# theimg = fmriviz.prepare_image(binary, voxel_map, fill=-1)
-# fmriviz.plot_slices(theimg, -1, 1, cmap='gray_r')
-
-# tvox = postprocess.get_top_voxels(true_vecs[0], 500)
-# binary = np.full(true_vecs[0].shape, -0.2)
-# binary[tvox] = 1
-
-# theimg = fmriviz.prepare_image(binary, voxel_map, fill=-1)
-# fmriviz.plot_slices(theimg, -1, 1, cmap='gray_r')
-
-theimg = fmriviz.prepare_image(true_vecs[0], voxel_map, fill=vmin)
-fmriviz.plot_slices(theimg, vmin, vmax)
 
 # %%
