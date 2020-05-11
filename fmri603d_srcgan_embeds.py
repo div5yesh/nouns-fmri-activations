@@ -233,9 +233,11 @@ def prepare_images(vecs, voxel_map):
 	return X
 
 def perceptual_loss(real, fake):
-	snr_img = tf.reshape(snr_img, (-1,1))
-	diff = tf.reshape(real, (-1,1)) - tf.reshape(fake, (-1,1))
-	return kb.mean(kb.square(tf.math.multiply(diff, snr_img))
+	b_size = real.shape[0]
+	ranks = tf.cast(tf.reshape(snr_img, (1,-1)),tf.float32)
+	diff = tf.reshape(real, (b_size, -1)) - tf.reshape(fake, (b_size, -1))
+	weighted = tf.math.multiply(diff, ranks)
+	return kb.mean(kb.square(weighted),axis=1)
 
 
 def adverserial_loss(real_output, fake_output):
@@ -283,7 +285,7 @@ gan_model.compile(loss=['binary_crossentropy', perceptual_loss], loss_weights=[1
 
 #%%
 # train model
-# train(g_model, d_model, gan_model, dataset, latent_dim, 5)
+train(g_model, d_model, gan_model, dataset, latent_dim, 1)
 
 # %%
 def transform_fake_images(fake, voxel_map):
