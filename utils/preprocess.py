@@ -180,8 +180,8 @@ class Evaluation:
         self_match = np.sum(np.diag(similarity))    
         #p1i2_p2i1
         cross_match = np.sum(similarity) - self_match
-        return [similarity[0][0], similarity[1][1]]
-        # return self_match > cross_match
+        # return [similarity[0][0], similarity[1][1]]
+        return self_match > cross_match
 
     def img2vector(self, fmri_image, voxel_map):
         (col2coord, coord2col) = voxel_map

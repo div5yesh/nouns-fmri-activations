@@ -4,43 +4,49 @@ import numpy as np
 import scipy.io, pickle, os
 from scipy.stats.stats import pearsonr
 from sklearn.linear_model import LinearRegression
+from sklearn import preprocessing
 
 from utils.visualize import fmriviz
 from utils.preprocess import dataloader, preprocess, postprocess
 
 # %%
-def train(features, trial_map, data_flat, idx=1):
-    nouns = set(trial_map.keys())
-    test_combinations = combinations(nouns, 2)
-    iteration = 0
+def train(features, trial_map, samples):
     predictions = []
     true_images = []
     labels = []
 
-    # model
-    reg_model = LinearRegression()
+    nouns = np.array(list(trial_map.keys()))
+    train_vectors, embeddings = preprocess.prepare_data(features, trial_map, samples, nouns)
 
-    for test_nouns in test_combinations:
-        train_nouns = nouns - set(test_nouns)
+    indices = set(range(len(nouns)))
+    test_combinations = combinations(indices, 2)
+    
+    # model
+    model = LinearRegression()
+
+    for idx, test_nouns in enumerate(test_combinations):
+        train_nouns = list(indices - set(test_nouns))
+        test_nouns = list(test_nouns)
 
         # prepare dataset
-        train_images, train_features = preprocess.prepare_data(features, trial_map, data_flat, train_nouns)
-        test_images, test_features = preprocess.prepare_data(features, trial_map, data_flat, test_nouns)
+        trainX = embeddings[train_nouns]
+        trainY = train_vectors[train_nouns]
+        testX = embeddings[test_nouns]
+        testY = train_vectors[test_nouns]
 
         # training
-        reg_model.fit(train_features, train_images)
-        pred_images = reg_model.predict(test_features)
+        model.fit(trainX, trainY)
+        predY = model.predict(testX)
 
-        predictions += [pred_images]
-        true_images += [test_images]
-        labels += [test_nouns]
+        predictions += [predY]
+        true_images += [testY]
+        labels += [nouns[test_nouns]]
 
-        iteration += 1
-        if iteration % 100 == 0:
-            print("Training Combination: %d/%d" % (iteration, 1770))
+        if idx % 100 == 0:
+            print("Training Combination: %d/%d" % (idx, 1770))
             # break
 
-    return np.array(predictions), np.array(true_images), labels
+    return np.array(predictions), np.array(true_images), np.array(labels)
 
 def test(snr, predictions, true_images):
     arr_similarity = []
@@ -48,13 +54,13 @@ def test(snr, predictions, true_images):
         similarity = postprocess.evaluate(snr, predictions[i], true_images[i],500)
         arr_similarity += [similarity]
 
-    # accuracy = sum(arr_similarity * 1)/len(arr_similarity)
-    # print('Accuracy: %f' % (accuracy))
+    accuracy = sum(arr_similarity * 1)/len(arr_similarity)
+    print('Accuracy: %f' % (accuracy))
     return arr_similarity
 
 # %% ---------------------- train-------------------------------------------
 all_pairs = []
-for i in range(1,2):
+for i in range(1,10):
     participant = i
     samples = dataloader.data[participant].samples
     voxel_map = dataloader.data[participant].voxel_map
@@ -62,11 +68,12 @@ for i in range(1,2):
     features = dataloader.features
 
     print("Participant: %d" % (participant))
+    
     predictions, true_images, labels = train(features, trial_map, samples)
     all_pairs += [[predictions,true_images, labels]]
 
 # %% ---------------------- test-------------------------------------------
-for i in range(1,2):
+for i in range(1,10):
     participant = i
     samples = dataloader.data[participant].samples
     voxel_map = dataloader.data[participant].voxel_map
