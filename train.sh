@@ -13,5 +13,6 @@ timestamp=$(date +%s)
 
 echo $python
 
-echo "Args: ${batch} ${epoch} ${model}"
+echo "Args: btach=${batch} epoch=${epoch} model=${model}"
 python fmri603d_srcgan_embeds.py $batch $epoch $model > "${timestamp}.txt"
+echo "output logged to ${timestamp}.txt"
