@@ -6,12 +6,11 @@
 import pickle
 from itertools import groupby, combinations
 
-import os
+import os, sys
 os.environ["CUDA_DEVICE_ORDER"]="PCI_BUS_ID"
  
 # The GPU id to use, usually either "0" or "1";
 os.environ["CUDA_VISIBLE_DEVICES"]="0"
-
 
 # %%
 # example of training an conditional gan on the fashion mnist dataset
@@ -42,11 +41,9 @@ from sklearn import preprocessing
 from sklearn.metrics.pairwise import cosine_similarity
 np.set_printoptions(suppress=True)
 
-
 # %%
 from utils.visualize import fmriviz
 from utils.preprocess import dataloader, preprocess, postprocess
-
 
 # %%
 # define the standalone discriminator model
@@ -202,25 +199,7 @@ def train(g_model, d_model, gan_model, dataset, latent_dim, n_epochs=100, n_batc
 			# summarize loss on this batch
 			print('>%d, %d/%d, d1=%.3f, d2=%.3f g=%.3f,%.3f' % (i+1, j+1, bat_per_epo, d_loss1, d_loss2, g_loss[0], g_loss[1]))
 	# save the generator model
-	g_model.save(os.path.join('pretrained','fmri3d_srcgan60_1k.h5'))
-
-# generate images
-def generate_pred_pairs(model, labels):
-    latent_points, _ = generate_latent_points(1000, 2)
-    X  = model.predict([latent_points, labels])
-    predictions = X[:,:,:,:,0]
-    return predictions, labels
-
-# test and calculate accuracy
-def test(snr, predictions, true_images):
-    arr_similarity = []
-    for i in range(len(predictions)):
-        similarity = postprocess.evaluate(snr, predictions[i], true_images[i], 500)
-        arr_similarity += [similarity]
-
-    accuracy = sum(arr_similarity * 1)/len(arr_similarity)
-    print('Accuracy: %f' % (accuracy))
-    return arr_similarity
+	g_model.save(os.path.join('pretrained', sys.argv[3] + '.h5'))
 
 def prepare_images(vecs, voxel_map):
 	images = []
@@ -233,11 +212,11 @@ def prepare_images(vecs, voxel_map):
 	return X
 
 def perceptual_loss(real, fake):
-	b_size = real.shape[0]
-	ranks = tf.cast(tf.reshape(snr_img, (1,-1)),tf.float32)
+	b_size = tf.shape(real)[0]
+	# ranks = tf.cast(tf.reshape(snr_img, (1,-1)),tf.float32)
 	diff = tf.reshape(real, (b_size, -1)) - tf.reshape(fake, (b_size, -1))
-	weighted = tf.math.multiply(diff, ranks)
-	return kb.mean(kb.square(weighted),axis=1)
+	# weighted = tf.math.multiply(diff, ranks)
+	return kb.mean(kb.square(diff))
 
 
 def adverserial_loss(real_output, fake_output):
@@ -285,232 +264,4 @@ gan_model.compile(loss=['binary_crossentropy', perceptual_loss], loss_weights=[1
 
 #%%
 # train model
-train(g_model, d_model, gan_model, dataset, latent_dim, 1)
-
-# %%
-def transform_fake_images(fake, voxel_map):
-    predictions = []
-    for img in fake:
-        vector = postprocess.img2vector(img, voxel_map)
-        predictions += [vector]
-    return np.array(predictions)
-
-# load model
-model = load_model(os.path.join('pretrained','fmri3d_srcgan60_1k.h5'))
-
-#%%
-all_predictions = []
-custom_labels = [["cup","cup"],["hammer","hammer"],["house","house"],["knife","knife"],["screwdriver","screwdriver"]]
-
-all_img_pairs = []
-nouns = set(trial_map.keys())
-test_combinations = list(combinations(nouns, 2))
-
-for pair in test_combinations:
-    custom_y = lencoder.transform(pair)
-    # print(custom_y)
-    fake_images, predy = generate_pred_pairs(model, custom_y)
-    predictions = transform_fake_images(fake_images, voxel_map)
-    true_vecs = train_vectors[predy]
-    # print(lencoder.inverse_transform(predy))
-
-    all_predictions += [[predictions, true_vecs]]
-    # all_img_pairs += [[fake_images,trainX[predy,:,:,:,0], custom_labels[i]]]
-all_predictions = np.array(all_predictions)
-
-
-# %%
-asimtemp = test(snr, all_predictions[:,0], all_predictions[:,1])
-
-
-#%% ---------------------------------------------------------------------
-for i in range(5):
-    p1_gen = all_predictions[i][0][1]
-    p1_real = all_predictions[i][1][1]
-    lbl = test_combinations[i][1]
-
-    vmin = np.min(p1_real)
-    vmax = np.max(p1_real)
-
-    sample_image = fmriviz.prepare_image(p1_real, voxel_map, fill=vmin)
-    fmriviz.plot_slices(sample_image,vmin,vmax, filename="GAN_" + lbl + "_real")
-
-    sample_image = fmriviz.prepare_image(p1_gen, voxel_map, fill=vmin)
-    fmriviz.plot_slices(sample_image,vmin,vmax, filename="GAN_" + lbl + "_gen")
-
-
-# %%
-fmriviz.plot_slices(fake_images[0], '3dconvtest1k_embeds')
-thevec = postprocess.img2vector(fake_images[0],voxel_map)
-theimg = fmriviz.prepare_image(thevec, voxel_map)
-fmriviz.plot_slices(theimg, '3dconvtest1k_remap_embeds')
-fmriviz.plot_slices(trainX[predy[0],:,:,:,0])
-
-
-# %%
-cosine_similarity(fake_images[0].reshape(1,-1), theimg.reshape(1,-1))
-
-
-# %%
-cosine_similarity(trainX[predy[0],:,:,:,0].reshape(1,-1), theimg.reshape(1,-1))
-
-
-# %%
-cosine_similarity(thevec.reshape(1,-1), samples[predy[0]].reshape(1,-1))
-
-
-# %%
-top = postprocess.get_top_voxels(samples[predy[0]],500)
-cosine_similarity(thevec[top].reshape(1,-1), samples[predy[0]][top].reshape(1,-1))
-
-
-# %%
-top = postprocess.get_top_voxels(snr,500)
-cosine_similarity((thevec * snr)[top].reshape(1,-1), samples[predy[0]][top].reshape(1,-1))
-
-
-# %%
-#%%----------------------------------------test------------------------------------------
-predictions = np.zeros((1,21764))
-test_combinations = list(combinations(Y, 2))
-latent_points, _ = generate_latent_points(1000, len(Y))
-
-for i in range(6):
-	start = i * 10
-	end = (i + 1) * 10
-	X  = model.predict([latent_points[start:end], Y[start:end]])
-	fake_image = X[:,:,:,:,0]
-	preds = transform_fake_images(fake_image, voxel_map)
-	predictions = np.concatenate((predictions, preds), axis=0)
-
-predictions = predictions[1:]
-true_vecs = train_vectors[Y]
-
-#%%
-def test(snr, combinations, predictions, true_images):
-    arr_similarity = []
-    for pair in combinations:
-        idx = list(pair)
-        similarity = postprocess.evaluate(snr, predictions[idx], true_images[idx])
-        arr_similarity += [similarity]
-
-    accuracy = sum(arr_similarity * 1)/len(arr_similarity)
-    print('Accuracy: %f' % (accuracy))
-    return np.array(arr_similarity)
-
-temp = test(snr, test_combinations, predictions, true_vecs)
-
-#%%
-def cl_eval(snr, predictions, true_images):
-    arr_similarity = []
-    for i in range(len(predictions)):
-        # similarity = postprocess.evaluate(snr, predictions[i], true_images[i])
-        similarity = postprocess.classic_eval(snr, predictions[i], true_images[i], 0.7, 500)
-        # similarity = postprocess.classic_eval(true_images[i], predictions[i], true_images[i], 0.7, 500)
-        arr_similarity += [similarity]
-
-    accuracy = sum(arr_similarity * 1)/len(arr_similarity)
-    print('Accuracy: %f' % (accuracy))
-    return np.array(arr_similarity)
-
-temp = cl_eval(snr, predictions, true_vecs)
-
-# %%
-
-vmin = np.min(true_vecs[0])
-vmax = np.max(true_vecs[0])
-
-theimg = fmriviz.prepare_image(predictions[0], voxel_map, fill=vmin)
-fmriviz.plot_slices(theimg, vmin, vmax)
-
-# tvox = postprocess.get_top_voxels(predictions[0], 500)
-# binary = np.full(true_vecs[0].shape, -0.2)
-# binary[tvox] = 1
-
-# theimg = fmriviz.prepare_image(binary, voxel_map, fill=-1)
-# fmriviz.plot_slices(theimg, -1, 1, cmap='gray_r')
-
-# tvox = postprocess.get_top_voxels(true_vecs[0], 500)
-# binary = np.full(true_vecs[0].shape, -0.2)
-# binary[tvox] = 1
-
-# theimg = fmriviz.prepare_image(binary, voxel_map, fill=-1)
-# fmriviz.plot_slices(theimg, -1, 1, cmap='gray_r')
-
-theimg = fmriviz.prepare_image(true_vecs[0], voxel_map, fill=vmin)
-fmriviz.plot_slices(theimg, vmin, vmax)
-
-#%%
-nouns = list(trial_map.keys())
-y_Bar = lencoder.transform(nouns)
-
-predictions = np.zeros((1,51,61,23))
-latent_points, _ = generate_latent_points(1000, len(y_Bar))
-
-for i in range(6):
-	start = i * 10
-	end = (i + 1) * 10
-	X  = model.predict([latent_points[start:end], y_Bar[start:end]])
-	fake_images = X[:,:,:,:,0]
-	predictions = np.concatenate((predictions, fake_images), axis=0)
-
-predictions = predictions[1:]
-
-#%%
-vol_match = []
-for pred in predictions:
-	vec = postprocess.img2vector(pred, voxel_map)
-	img = fmriviz.prepare_image(vec, voxel_map)
-	vol_match += [cosine_similarity(img.reshape(1,-1), pred.reshape(1,-1))[0][0]]
-
-match = sum(vol_match * 1)/len(vol_match)
-print('Volume Match: %f' % (match))
-
-# %%
-vmin = np.min(true_vecs[0])
-vmax = np.max(true_vecs[0])
-
-vec = postprocess.img2vector(predictions[0], voxel_map)
-img = fmriviz.prepare_image(vec, voxel_map, vmin)
-fmriviz.plot_slices(img, vmin, vmax, "refrigrator_gen_3dgan_remapped")
-
-genimg = predictions[1]
-
-for i in range(genimg.shape[0]):
-	for j in range(genimg.shape[1]):
-		for k in range(genimg.shape[2]):
-			if -0.05 < genimg[i][j][k] < 0.05:
-				genimg[i][j][k] = vmin
-
-# theimg = fmriviz.prepare_image(predictions[0], voxel_map, fill=vmin)
-fmriviz.plot_slices(genimg, vmin, vmax)
-
-# tvox = postprocess.get_top_voxels(predictions[0], 500)
-# binary = np.full(true_vecs[0].shape, -0.2)
-# binary[tvox] = 1
-
-# theimg = fmriviz.prepare_image(binary, voxel_map, fill=-1)
-# fmriviz.plot_slices(theimg, -1, 1, cmap='gray_r')
-
-# tvox = postprocess.get_top_voxels(true_vecs[0], 500)
-# binary = np.full(true_vecs[0].shape, -0.2)
-# binary[tvox] = 1
-
-# theimg = fmriviz.prepare_image(binary, voxel_map, fill=-1)
-# fmriviz.plot_slices(theimg, -1, 1, cmap='gray_r')
-
-theimg = fmriviz.prepare_image(true_vecs[0], voxel_map, fill=vmin)
-fmriviz.plot_slices(theimg, vmin, vmax)
-
-# %%
-# _, x_phi = self.vgg.build_model(x, tf.constant(False), False)
-	# _, imitation_phi = self.vgg.build_model(
-	# 	imitation, tf.constant(False), True)
-	# content_loss = None
-	# for i in range(len(x_phi)):
-	# 	l2_loss = tf.nn.l2_loss(x_phi[i] - imitation_phi[i])
-	# 	if content_loss is None:
-	# 		content_loss = l2_loss
-	# 	else:
-	# 		content_loss += l2_loss
-	# return tf.reduce_mean(content_loss)
+train(g_model, d_model, gan_model, dataset, latent_dim, int(sys.argv[2]), int(sys.argv[1]))
