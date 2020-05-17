@@ -15,6 +15,7 @@ os.environ["CUDA_VISIBLE_DEVICES"]="0"
 # %%
 # example of training an conditional gan on the fashion mnist dataset
 import numpy as np
+from numpy.random import randint, randn
 from tensorflow.keras.models import load_model
 from matplotlib import pyplot as plt
 from sklearn import preprocessing
