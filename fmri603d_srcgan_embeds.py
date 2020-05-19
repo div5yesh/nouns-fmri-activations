@@ -160,6 +160,7 @@ def generate_latent_points(latent_dim, n_samples, n_classes=60):
 	x_input = randn(latent_dim * n_samples)
 	# reshape into a batch of inputs for the network
 	z_input = x_input.reshape(n_samples, latent_dim)
+	# z_input = tf.random.normal((n_samples, latent_dim), mean=0.0, stddev=1.0, dtype=tf.dtypes.float32)
 	# generate labels
 	labels = randint(0, n_classes, n_samples)
 	return [z_input, labels]
@@ -213,10 +214,10 @@ def prepare_images(vecs, voxel_map):
 
 def perceptual_loss(real, fake):
 	b_size = tf.shape(real)[0]
-	# ranks = tf.cast(tf.reshape(snr_img, (1,-1)),tf.float32)
+	ranks = tf.cast(tf.reshape(snr_img, (1,-1)),tf.float32)
 	diff = tf.reshape(real, (b_size, -1)) - tf.reshape(fake, (b_size, -1))
-	# weighted = tf.math.multiply(diff, ranks)
-	return kb.mean(kb.square(diff))
+	weighted = tf.math.multiply(diff, ranks)
+	return kb.mean(kb.square(weighted))
 
 
 def adverserial_loss(real_output, fake_output):
@@ -265,3 +266,5 @@ gan_model.compile(loss=['binary_crossentropy', perceptual_loss], loss_weights=[1
 #%%
 # train model
 train(g_model, d_model, gan_model, dataset, latent_dim, int(sys.argv[2]), int(sys.argv[1]))
+
+# %%
