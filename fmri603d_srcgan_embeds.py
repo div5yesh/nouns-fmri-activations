@@ -151,7 +151,8 @@ def generate_real_samples(dataset, n_samples):
 	# select images and labels
 	X, labels = images[ix], labels[ix]
 	# generate class labels
-	y = ones((n_samples, 1))
+	# y = ones((n_samples, 1))
+	y = randint(7, 12, (n_samples, 1)) / 10
 	return [X, labels], y
 
 # generate points in latent space as input for the generator
@@ -172,7 +173,8 @@ def generate_fake_samples(generator, latent_dim, n_samples):
 	# predict outputs
 	images = generator.predict([z_input, labels_input])
 	# create class labels
-	y = zeros((n_samples, 1))
+	# y = zeros((n_samples, 1))
+	y = randint(0, 3, (n_samples, 1)) / 10
 	return [images, labels_input], y
 
 # train the generator and discriminator
@@ -194,7 +196,8 @@ def train(g_model, d_model, gan_model, dataset, latent_dim, n_epochs=100, n_batc
 			# prepare points in latent space as input for the generator
 			[z_input, _] = generate_latent_points(latent_dim, n_batch)
 			# create inverted labels for the fake samples
-			y_gan = ones((n_batch, 1))
+			# y_gan = ones((n_batch, 1))
+			y_gan = randint(7, 12, (n_batch, 1)) / 10
 			# update the generator via the discriminator's error
 			g_loss = gan_model.train_on_batch([z_input, labels_real], [y_gan, X_real])
 			# summarize loss on this batch
@@ -218,15 +221,6 @@ def perceptual_loss(real, fake):
 	diff = tf.reshape(real, (b_size, -1)) - tf.reshape(fake, (b_size, -1))
 	weighted = tf.math.multiply(diff, ranks)
 	return kb.mean(kb.square(weighted))
-
-
-def adverserial_loss(real_output, fake_output):
-	alpha = 1e-3
-	g_loss = kb.mean(kb.l2_normalize(fake_output - kb.ones_like(fake_output)))
-	d_loss_real = kb.mean(kb.l2_normalize(real_output - kb.ones_like(real_output)))
-	d_loss_fake = kb.mean(kb.l2_normalize(fake_output + kb.zeros_like(fake_output)))
-	d_loss = d_loss_fake + d_loss_real
-	return (g_loss*alpha, d_loss*alpha)
 
 
 # %%
