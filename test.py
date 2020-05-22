@@ -15,6 +15,7 @@ os.environ["CUDA_VISIBLE_DEVICES"]="0"
 # %%
 # example of training an conditional gan on the fashion mnist dataset
 import numpy as np
+import tensorflow as tf
 from numpy.random import randint, randn
 from tensorflow.keras.models import load_model
 from matplotlib import pyplot as plt
@@ -30,9 +31,10 @@ from utils.preprocess import dataloader, preprocess, postprocess
 # generate points in latent space as input for the generator
 def generate_latent_points(latent_dim, n_samples, n_classes=60):
 	# generate points in the latent space
-	x_input = randn(latent_dim * n_samples)
+	# x_input = randn(latent_dim * n_samples)
 	# reshape into a batch of inputs for the network
-	z_input = x_input.reshape(n_samples, latent_dim)
+	# z_input = x_input.reshape(n_samples, latent_dim)
+	z_input = tf.random.normal((n_samples, latent_dim), mean=0.0, stddev=1.0, dtype=tf.dtypes.float32)
 	# generate labels
 	labels = randint(0, n_classes, n_samples)
 	return [z_input, labels]
@@ -204,13 +206,12 @@ temp = test(snr, test_combinations, predictions, true_vecs)
 
 # temp = cl_eval(snr, predictions, true_vecs)
 
-# %%
+# %% --------------------------------main plots-------------------------------------------------------------------
+# vmin = np.min(true_vecs[0])
+# vmax = np.max(true_vecs[0])
 
-vmin = np.min(true_vecs[0])
-vmax = np.max(true_vecs[0])
-
-theimg = fmriviz.prepare_image(predictions[0], voxel_map, fill=vmin)
-fmriviz.plot_slices(theimg, vmin, vmax)
+# theimg = fmriviz.prepare_image(predictions[0], voxel_map, fill=vmin)
+# fmriviz.plot_slices(theimg, vmin, vmax)
 
 # tvox = postprocess.get_top_voxels(predictions[0], 500)
 # binary = np.full(true_vecs[0].shape, -0.2)
@@ -226,10 +227,10 @@ fmriviz.plot_slices(theimg, vmin, vmax)
 # theimg = fmriviz.prepare_image(binary, voxel_map, fill=-1)
 # fmriviz.plot_slices(theimg, -1, 1, cmap='gray_r')
 
-theimg = fmriviz.prepare_image(true_vecs[0], voxel_map, fill=vmin)
-fmriviz.plot_slices(theimg, vmin, vmax)
+# theimg = fmriviz.prepare_image(true_vecs[0], voxel_map, fill=vmin)
+# fmriviz.plot_slices(theimg, vmin, vmax)
 
-# #%%
+# #%% -----------------------------------volume plots---------------------------------------------------------------------
 # nouns = list(trial_map.keys())
 # y_Bar = lencoder.transform(nouns)
 

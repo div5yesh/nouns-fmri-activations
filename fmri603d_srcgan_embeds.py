@@ -158,10 +158,10 @@ def generate_real_samples(dataset, n_samples):
 # generate points in latent space as input for the generator
 def generate_latent_points(latent_dim, n_samples, n_classes=60):
 	# generate points in the latent space
-	x_input = randn(latent_dim * n_samples)
+	# x_input = randn(latent_dim * n_samples)
 	# reshape into a batch of inputs for the network
-	z_input = x_input.reshape(n_samples, latent_dim)
-	# z_input = tf.random.normal((n_samples, latent_dim), mean=0.0, stddev=1.0, dtype=tf.dtypes.float32)
+	# z_input = x_input.reshape(n_samples, latent_dim)
+	z_input = tf.random.normal((n_samples, latent_dim), mean=0.0, stddev=1.0, dtype=tf.dtypes.float32)
 	# generate labels
 	labels = randint(0, n_classes, n_samples)
 	return [z_input, labels]
@@ -180,7 +180,7 @@ def generate_fake_samples(generator, latent_dim, n_samples):
 # train the generator and discriminator
 def train(g_model, d_model, gan_model, dataset, latent_dim, n_epochs=100, n_batch=2):
 	bat_per_epo = int(dataset[0].shape[0] / n_batch)
-	half_batch = n_batch #int(n_batch / 2)
+	half_batch = int(n_batch / 2)
 	# manually enumerate epochs
 	for i in range(n_epochs):
 		# enumerate batches over the training set
@@ -194,12 +194,12 @@ def train(g_model, d_model, gan_model, dataset, latent_dim, n_epochs=100, n_batc
 			# update discriminator model weights
 			d_loss2, _ = d_model.train_on_batch([X_fake, labels], y_fake)
 			# prepare points in latent space as input for the generator
-			[z_input, _] = generate_latent_points(latent_dim, n_batch)
+			[z_input, labels_input] = generate_latent_points(latent_dim, n_batch)
 			# create inverted labels for the fake samples
 			# y_gan = ones((n_batch, 1))
 			y_gan = randint(7, 12, (n_batch, 1)) / 10
 			# update the generator via the discriminator's error
-			g_loss = gan_model.train_on_batch([z_input, labels_real], [y_gan, X_real])
+			g_loss = gan_model.train_on_batch([z_input, labels_input], [y_gan, dataset[0][labels_input]])
 			# summarize loss on this batch
 			print('>%d, %d/%d, d1=%.3f, d2=%.3f g=%.3f,%.3f' % (i+1, j+1, bat_per_epo, d_loss1, d_loss2, g_loss[0], g_loss[1]))
 	# save the generator model
@@ -221,7 +221,6 @@ def perceptual_loss(real, fake):
 	diff = tf.reshape(real, (b_size, -1)) - tf.reshape(fake, (b_size, -1))
 	weighted = tf.math.multiply(diff, ranks)
 	return kb.mean(kb.square(weighted))
-
 
 # %%
 participant = 1
