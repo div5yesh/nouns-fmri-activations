@@ -3,9 +3,15 @@
 # To add a new markdown cell, type '# %% [markdown]'
 
 # %%
+import os, argparse
 from itertools import combinations
 
-import os, sys
+#%%
+parser = argparse.ArgumentParser()
+parser.add_argument('-m', '--model', default='model')
+parser.add_argument('-p', '--participant', default=1, type=int)
+args = parser.parse_args()
+
 os.environ["CUDA_DEVICE_ORDER"]="PCI_BUS_ID"
  
 # The GPU id to use, usually either "0" or "1";
@@ -62,7 +68,7 @@ def generate_latent_points(latent_dim, n_samples, n_classes=60):
 
 
 # %%
-participant = 1
+participant = args.participant
 samples = dataloader.data[participant].samples
 voxel_map = dataloader.data[participant].voxel_map
 trial_map = dataloader.data[participant].trial_map
@@ -89,7 +95,7 @@ def transform_fake_images(fake, voxel_map):
     return np.array(predictions)
 
 # load model
-model = load_model(os.path.join('pretrained', sys.argv[1] + '.h5'))
+model = load_model(os.path.join('pretrained', args.model + '.h5'))
 
 # #%%
 # all_predictions = []
@@ -162,7 +168,7 @@ model = load_model(os.path.join('pretrained', sys.argv[1] + '.h5'))
 # cosine_similarity((thevec * snr)[top].reshape(1,-1), samples[predy[0]][top].reshape(1,-1))
 
 #%%----------------------------------------test------------------------------------------
-predictions = np.zeros((1,21764))
+predictions = np.zeros((1,samples.shape[1]))
 test_combinations = list(combinations(Y, 2))
 latent_points, _ = generate_latent_points(1000, len(Y))
 
