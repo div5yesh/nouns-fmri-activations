@@ -3,14 +3,22 @@
 # To add a new markdown cell, type '# %% [markdown]'
 
 # %%
-import pickle
+import os, pickle, argparse
 from itertools import groupby, combinations
 
-import os, sys
+#%%
+parser = argparse.ArgumentParser()
+parser.add_argument('-b', '--batch', default=2, type=int)
+parser.add_argument('-e', '--epoch', default=1000, type=int)
+parser.add_argument('-m', '--model', default='model')
+parser.add_argument('-p', '--participant', default=1, type=int)
+parser.add_argument('-g', '--gpu', default='0')
+args = parser.parse_args()
+
 os.environ["CUDA_DEVICE_ORDER"]="PCI_BUS_ID"
  
 # The GPU id to use, usually either "0" or "1";
-os.environ["CUDA_VISIBLE_DEVICES"]="0"
+os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu
 
 # %%
 # example of training an conditional gan on the fashion mnist dataset
@@ -203,7 +211,7 @@ def train(g_model, d_model, gan_model, dataset, latent_dim, n_epochs=100, n_batc
 			# summarize loss on this batch
 			print('>%d, %d/%d, d1=%.3f, d2=%.3f g=%.3f,%.3f' % (i+1, j+1, bat_per_epo, d_loss1, d_loss2, g_loss[0], g_loss[1]))
 	# save the generator model
-	g_model.save(os.path.join('pretrained', sys.argv[3] + '.h5'))
+	g_model.save(os.path.join('pretrained', args.model + '_p' + str(args.participant) + '.h5'))
 
 def prepare_images(vecs, voxel_map):
 	images = []
@@ -223,7 +231,7 @@ def perceptual_loss(real, fake):
 	return kb.mean(kb.square(weighted))
 
 # %%
-participant = 1
+participant = args.participant
 samples = dataloader.data[participant].samples
 voxel_map = dataloader.data[participant].voxel_map
 trial_map = dataloader.data[participant].trial_map
@@ -258,6 +266,6 @@ gan_model.compile(loss=['binary_crossentropy', perceptual_loss], loss_weights=[1
 
 #%%
 # train model
-train(g_model, d_model, gan_model, dataset, latent_dim, int(sys.argv[2]), int(sys.argv[1]))
+train(g_model, d_model, gan_model, dataset, latent_dim, args.epoch, args.batch)
 
-# %%
+#%%
