@@ -14,6 +14,7 @@ parser.add_argument('-m', '--model', default='model')
 parser.add_argument('-p', '--participant', default=1, type=int)
 parser.add_argument('-g', '--gpu', default='0')
 args = parser.parse_args()
+print(args)
 
 os.environ["CUDA_DEVICE_ORDER"]="PCI_BUS_ID"
  
@@ -44,6 +45,7 @@ from tensorflow.keras.layers import LeakyReLU
 from tensorflow.keras.layers import Dropout
 from tensorflow.keras.layers import Embedding
 from tensorflow.keras.layers import Concatenate
+from tensorflow.keras.losses import Huber
 import tensorflow.keras.backend as kb
 from sklearn import preprocessing
 from sklearn.metrics.pairwise import cosine_similarity
@@ -144,6 +146,7 @@ def define_gan(g_model, d_model):
 	# define gan model as taking noise and label and outputting a classification
 	# model = Model([latent_points, labels], discriminator_output)
 	model = Model([latent_points, labels], [discriminator_output, generator_output])
+	# model = Model([latent_points, labels], [discriminator_output, generator_output, discriminator_output])
 	# compile model
 	# opt = Adam(lr=0.0002, beta_1=0.5)
 	# model.compile(loss='binary_crossentropy', optimizer=opt)
@@ -208,6 +211,7 @@ def train(g_model, d_model, gan_model, dataset, latent_dim, n_epochs=100, n_batc
 			y_gan = randint(7, 12, (n_batch, 1)) / 10
 			# update the generator via the discriminator's error
 			g_loss = gan_model.train_on_batch([z_input, labels_input], [y_gan, dataset[0][labels_input]])
+			# g_loss = gan_model.train_on_batch([z_input, labels_input], [y_gan, dataset[0][labels_input], y_gan])
 			# summarize loss on this batch
 			print('>%d, %d/%d, d1=%.3f, d2=%.3f g=%.3f,%.3f' % (i+1, j+1, bat_per_epo, d_loss1, d_loss2, g_loss[0], g_loss[1]))
 	# save the generator model
@@ -263,6 +267,7 @@ g_model = define_generator(embeddings, latent_dim)
 # create the gan
 gan_model = define_gan(g_model, d_model)
 gan_model.compile(loss=['binary_crossentropy', perceptual_loss], loss_weights=[1e-3, 1], optimizer=optimizer)
+# gan_model.compile(loss=['binary_crossentropy', perceptual_loss, Huber(delta=0.24)], loss_weights=[1e-3, 1, 1], optimizer=optimizer)
 
 #%%
 # train model

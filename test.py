@@ -11,6 +11,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument('-m', '--model', default='model')
 parser.add_argument('-p', '--participant', default=1, type=int)
 args = parser.parse_args()
+print(args)
 
 os.environ["CUDA_DEVICE_ORDER"]="PCI_BUS_ID"
  
