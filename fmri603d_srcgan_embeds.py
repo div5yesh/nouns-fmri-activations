@@ -45,7 +45,6 @@ from tensorflow.keras.layers import LeakyReLU
 from tensorflow.keras.layers import Dropout
 from tensorflow.keras.layers import Embedding
 from tensorflow.keras.layers import Concatenate
-from tensorflow.keras.losses import Huber
 import tensorflow.keras.backend as kb
 from sklearn import preprocessing
 from sklearn.metrics.pairwise import cosine_similarity
@@ -145,8 +144,8 @@ def define_gan(g_model, d_model):
 	discriminator_output = d_model([generator_output, labels])
 	# define gan model as taking noise and label and outputting a classification
 	# model = Model([latent_points, labels], discriminator_output)
-	model = Model([latent_points, labels], [discriminator_output, generator_output])
-	# model = Model([latent_points, labels], [discriminator_output, generator_output, discriminator_output])
+	# model = Model([latent_points, labels], [discriminator_output, generator_output])
+	model = Model([latent_points, labels], [discriminator_output, generator_output, discriminator_output])
 	# compile model
 	# opt = Adam(lr=0.0002, beta_1=0.5)
 	# model.compile(loss='binary_crossentropy', optimizer=opt)
@@ -210,8 +209,8 @@ def train(g_model, d_model, gan_model, dataset, latent_dim, n_epochs=100, n_batc
 			# y_gan = ones((n_batch, 1))
 			y_gan = randint(7, 12, (n_batch, 1)) / 10
 			# update the generator via the discriminator's error
-			g_loss = gan_model.train_on_batch([z_input, labels_input], [y_gan, dataset[0][labels_input]])
-			# g_loss = gan_model.train_on_batch([z_input, labels_input], [y_gan, dataset[0][labels_input], y_gan])
+			# g_loss = gan_model.train_on_batch([z_input, labels_input], [y_gan, dataset[0][labels_input]])
+			g_loss = gan_model.train_on_batch([z_input, labels_input], [y_gan, dataset[0][labels_input], y_gan])
 			# summarize loss on this batch
 			print('>%d, %d/%d, d1=%.3f, d2=%.3f g=%.3f,%.3f' % (i+1, j+1, bat_per_epo, d_loss1, d_loss2, g_loss[0], g_loss[1]))
 	# save the generator model
@@ -233,6 +232,15 @@ def perceptual_loss(real, fake):
 	diff = tf.reshape(real, (b_size, -1)) - tf.reshape(fake, (b_size, -1))
 	weighted = tf.math.multiply(diff, ranks)
 	return kb.mean(kb.square(weighted))
+
+def huber_loss(delta):
+	def huber_fn(real, fake):
+		b_size = tf.shape(real)[0]
+		ranks = tf.cast(tf.reshape(snr_img, (1,-1)),tf.float32)
+		diff = tf.reshape(real, (b_size, -1)) - tf.reshape(fake, (b_size, -1))
+		weighted = tf.math.multiply(diff, ranks)
+		return kb.mean(kb.sqrt(kb.square(weighted) + delta * delta))
+	return huber_fn
 
 # %%
 participant = args.participant
@@ -266,8 +274,8 @@ d_model.compile(loss='mse', optimizer=optimizer, metrics=['accuracy'])
 g_model = define_generator(embeddings, latent_dim)
 # create the gan
 gan_model = define_gan(g_model, d_model)
-gan_model.compile(loss=['binary_crossentropy', perceptual_loss], loss_weights=[1e-3, 1], optimizer=optimizer)
-# gan_model.compile(loss=['binary_crossentropy', perceptual_loss, Huber(delta=0.24)], loss_weights=[1e-3, 1, 1], optimizer=optimizer)
+# gan_model.compile(loss=['binary_crossentropy', perceptual_loss], loss_weights=[1e-3, 1], optimizer=optimizer)
+gan_model.compile(loss=['binary_crossentropy', perceptual_loss, huber_loss(delta=0.24)], loss_weights=[1e-3, 1, 1], optimizer=optimizer)
 
 #%%
 # train model
