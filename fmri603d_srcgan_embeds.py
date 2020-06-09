@@ -13,6 +13,7 @@ parser.add_argument('-e', '--epoch', default=1000, type=int)
 parser.add_argument('-m', '--model', default='model')
 parser.add_argument('-p', '--participant', default=1, type=int)
 parser.add_argument('-g', '--gpu', default='0')
+parser.add_argument('-d', '--delta', default=0.24, type=float)
 args = parser.parse_args()
 print(args)
 
@@ -144,8 +145,7 @@ def define_gan(g_model, d_model):
 	discriminator_output = d_model([generator_output, labels])
 	# define gan model as taking noise and label and outputting a classification
 	# model = Model([latent_points, labels], discriminator_output)
-	# model = Model([latent_points, labels], [discriminator_output, generator_output])
-	model = Model([latent_points, labels], [discriminator_output, generator_output, discriminator_output])
+	model = Model([latent_points, labels], [discriminator_output, generator_output])
 	# compile model
 	# opt = Adam(lr=0.0002, beta_1=0.5)
 	# model.compile(loss='binary_crossentropy', optimizer=opt)
@@ -209,8 +209,7 @@ def train(g_model, d_model, gan_model, dataset, latent_dim, n_epochs=100, n_batc
 			# y_gan = ones((n_batch, 1))
 			y_gan = randint(7, 12, (n_batch, 1)) / 10
 			# update the generator via the discriminator's error
-			# g_loss = gan_model.train_on_batch([z_input, labels_input], [y_gan, dataset[0][labels_input]])
-			g_loss = gan_model.train_on_batch([z_input, labels_input], [y_gan, dataset[0][labels_input], y_gan])
+			g_loss = gan_model.train_on_batch([z_input, labels_input], [y_gan, dataset[0][labels_input]])
 			# summarize loss on this batch
 			print('>%d, %d/%d, d1=%.3f, d2=%.3f g=%.3f,%.3f' % (i+1, j+1, bat_per_epo, d_loss1, d_loss2, g_loss[0], g_loss[1]))
 	# save the generator model
@@ -274,8 +273,7 @@ d_model.compile(loss='mse', optimizer=optimizer, metrics=['accuracy'])
 g_model = define_generator(embeddings, latent_dim)
 # create the gan
 gan_model = define_gan(g_model, d_model)
-# gan_model.compile(loss=['binary_crossentropy', perceptual_loss], loss_weights=[1e-3, 1], optimizer=optimizer)
-gan_model.compile(loss=['binary_crossentropy', perceptual_loss, huber_loss(delta=0.24)], loss_weights=[1e-3, 1, 1], optimizer=optimizer)
+gan_model.compile(loss=['binary_crossentropy', huber_loss(delta=args.delta)], loss_weights=[1e-3, 1], optimizer=optimizer)
 
 #%%
 # train model
