@@ -10,13 +10,15 @@ from itertools import combinations
 parser = argparse.ArgumentParser()
 parser.add_argument('-m', '--model', default='model')
 parser.add_argument('-p', '--participant', default=1, type=int)
+parser.add_argument('-g', '--gpu', default='0')
+parser.add_argument('-r', '--rep', default=1, type=int)
 args = parser.parse_args()
 print(args)
 
 os.environ["CUDA_DEVICE_ORDER"]="PCI_BUS_ID"
  
 # The GPU id to use, usually either "0" or "1";
-os.environ["CUDA_VISIBLE_DEVICES"]="0"
+os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu
 
 
 # %%
@@ -168,22 +170,6 @@ model = load_model(os.path.join('pretrained', args.model + '.h5'))
 # top = postprocess.get_top_voxels(snr,500)
 # cosine_similarity((thevec * snr)[top].reshape(1,-1), samples[predy[0]][top].reshape(1,-1))
 
-#%%----------------------------------------test------------------------------------------
-predictions = np.zeros((1,samples.shape[1]))
-test_combinations = list(combinations(Y, 2))
-latent_points, _ = generate_latent_points(1000, len(Y))
-
-for i in range(6):
-	start = i * 10
-	end = (i + 1) * 10
-	X  = model.predict([latent_points[start:end], Y[start:end]])
-	fake_image = X[:,:,:,:,0]
-	preds = transform_fake_images(fake_image, voxel_map)
-	predictions = np.concatenate((predictions, preds), axis=0)
-
-predictions = predictions[1:]
-true_vecs = train_vectors[Y]
-
 #%%
 def test(snr, combinations, predictions, true_images):
     arr_similarity = []
@@ -192,11 +178,35 @@ def test(snr, combinations, predictions, true_images):
         similarity = postprocess.evaluate(snr, predictions[idx], true_images[idx])
         arr_similarity += [similarity]
 
-    accuracy = sum(arr_similarity * 1)/len(arr_similarity)
-    print('Accuracy: %f' % (accuracy))
     return np.array(arr_similarity)
 
-temp = test(snr, test_combinations, predictions, true_vecs)
+#%%----------------------------------------test------------------------------------------
+test_combinations = list(combinations(Y, 2))
+arr_accuracy = []
+
+for i in range(args.rep):
+	predictions = np.zeros((1,samples.shape[1]))
+	latent_points, _ = generate_latent_points(1000, len(Y))
+
+	for i in range(6):
+		start = i * 10
+		end = (i + 1) * 10
+		X  = model.predict([latent_points[start:end], Y[start:end]])
+		fake_image = X[:,:,:,:,0]
+		preds = transform_fake_images(fake_image, voxel_map)
+		predictions = np.concatenate((predictions, preds), axis=0)
+
+	predictions = predictions[1:]
+	true_vecs = train_vectors[Y]
+
+	arr_similarity = test(snr, test_combinations, predictions, true_vecs)
+	accuracy = np.mean(arr_similarity)
+	print('Accuracy: %f' % (accuracy))
+	arr_accuracy += [accuracy]
+
+arr_accuracy = np.array(arr_accuracy)
+mean = np.mean(arr_accuracy)
+print('Mean Accuracy: %f' % (mean))
 
 # #%%
 # def cl_eval(snr, predictions, true_images):
