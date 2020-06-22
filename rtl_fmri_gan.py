@@ -277,7 +277,7 @@ def train(g_model, dis_model, gen_model, dataset, latent_dim, n_epochs=100, n_ba
 			z_input, z_labels = generate_latent_points(latent_dim, n_batch)
 			y_fake = randint(0, 3, (n_batch, 1)) / 10
 
-			g_loss, _ = gen_model.train_on_batch([dataset[0][z_labels], z_input, z_labels, z_labels], [y_fake, dataset[0][labels]])
+			g_loss = gen_model.train_on_batch([dataset[0][z_labels], z_input, z_labels, z_labels], [y_fake, dataset[0][z_labels]])
 			
 			print('>%d, %d/%d, d=%.3f, g=%.3f, %.3f' % (i+1, j+1, bat_per_epo, d_loss, g_loss[0], g_loss[1]))
 	# save the generator model
