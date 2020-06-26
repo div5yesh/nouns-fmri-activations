@@ -168,10 +168,14 @@ class Evaluation:
         return self.match2(predictions, true_images)
 
     def classic_eval(self, snr, predictions, true_images, threshold=0.7, top=500):
-        topvoxels = self.get_top_voxels(snr, top)
-        # snr_weight = snr[topvoxels]
-        predictions = predictions[topvoxels].reshape(1,-1)
-        true_images = true_images[topvoxels].reshape(1,-1)
+        if top != -1:
+            topvoxels = self.get_top_voxels(snr, top)
+            # snr_weight = snr[topvoxels]
+            predictions = predictions[topvoxels]
+            true_images = true_images[topvoxels]
+
+        predictions = predictions.reshape(1,-1)
+        true_images = true_images.reshape(1,-1)
         return cosine_similarity(predictions, true_images)[0][0]
 
     def match2(self, pred, act):
