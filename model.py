@@ -11,46 +11,12 @@ from tensorflow.keras.layers import Dropout
 from tensorflow.keras.layers import Embedding
 from tensorflow.keras.layers import Concatenate
 from tensorflow.keras.layers import Lambda
+from tensorflow.keras.optimizers import Adam
 
 class GAN:
     def __init__(self, embeddings, latent_dim):
-        input_shape = (51, 61, 23, 1)
-        input_a = Input(shape=input_shape)
-        input_b = Input(shape=input_shape)
-        in_label_a = Input(shape=(1,))
-        in_label_b = Input(shape=(1,))
-
-        d_model = self.define_discriminator(embeddings)
-        g_model = self.define_generator(embeddings, latent_dim)
-
-        dis_d1 = d_model([input_a, in_label_a])
-        dis_d2 = d_model([input_b, in_label_b])
-
-        def difference(inputs):
-            x1, x2 = inputs
-            return (x1 - x2)
-
-        dis_dif_layer = Lambda(difference)([dis_d1, dis_d2])
-        dis_out_layer = Dense(1, activation='sigmoid')(dis_dif_layer)
-
-        self.dis_model = Model([input_a, input_b, in_label_a, in_label_b], outputs=dis_out_layer, name="dis_model")
-
-        input_c = Input(shape=input_shape)
-        in_label_c = Input(shape=(1,))
-        gen_z_input, gen_label_input = g_model.input
-        d_model.trainable = False
-
-        gen_d1 = d_model([input_c, in_label_c])
-        gen_d2 = d_model([g_model.output, gen_label_input])
-
-        gen_dif_layer = Lambda(difference)([gen_d1, gen_d2])
-        gen_out_layer = Dense(1, activation='sigmoid')(gen_dif_layer)
-
-        self.gen_model = Model([input_c, gen_z_input, in_label_c, gen_label_input], outputs=[gen_out_layer, g_model.output], name="gan_model")
-
-    def compile(self, optimizer, losses, loss_weights):
-        self.dis_model.compile(loss='binary_crossentropy', optimizer=optimizer, metrics=['accuracy'])
-        self.gen_model.compile(loss=losses, loss_weights=loss_weights, optimizer=optimizer, metrics=['accuracy'])
+        self.embeddings = embeddings
+        self.latent_dim = latent_dim
 
     def define_discriminator(self, embeddings, in_shape=(51, 61, 23, 1), n_classes=60):
         # label input
@@ -125,3 +91,47 @@ class GAN:
         model = Model([in_lat, in_label], out_layer, name='generator')
         # print(model.summary())
         return model
+
+    def create(self, optimizer, losses, loss_weights):
+        d_model = self.define_discriminator(self.embeddings)
+        g_model = self.define_generator(self.embeddings, self.latent_dim)
+
+        input_shape = (51, 61, 23, 1)
+        input_a = Input(shape=input_shape)
+        input_b = Input(shape=input_shape)
+        in_label_a = Input(shape=(1,))
+        in_label_b = Input(shape=(1,))
+
+        dis_d1 = d_model([input_a, in_label_a])
+        dis_d2 = d_model([input_b, in_label_b])
+
+        def difference(inputs):
+            x1, x2 = inputs
+            return (x1 - x2)
+
+        dis_dif_layer = Lambda(difference)([dis_d1, dis_d2])
+        dis_out_layer = Dense(1, activation='sigmoid')(dis_dif_layer)
+
+        dis_model = Model([input_a, input_b, in_label_a, in_label_b], outputs=dis_out_layer, name="dis_model")
+        dis_model.compile(loss='binary_crossentropy', optimizer=optimizer, metrics=['accuracy'])
+        dis_model.summary()
+
+        input_c = Input(shape=input_shape)
+        in_label_c = Input(shape=(1,))
+        gen_z_input, gen_label_input = g_model.input
+
+        d_model.trainable = False
+        gen_d1 = d_model([input_c, in_label_c])
+        gen_d2 = d_model([g_model.output, gen_label_input])
+
+        gen_dif_layer = Lambda(difference)([gen_d1, gen_d2])
+        gen_out_layer = Dense(1, activation='sigmoid')(gen_dif_layer)
+
+        gan_model = Model([input_c, gen_z_input, in_label_c, gen_label_input], outputs=[gen_out_layer, g_model.output], name="gan_model")
+
+        gan_model.compile(loss=losses, loss_weights=loss_weights, optimizer=optimizer, metrics=['accuracy'])
+        gan_model.summary()
+
+        return g_model, dis_model, gan_model
+
+# %%
