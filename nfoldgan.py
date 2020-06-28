@@ -12,11 +12,11 @@ parser.add_argument('-e', '--epoch', default=1000, type=int)
 parser.add_argument('-m', '--model', default='model')
 parser.add_argument('-p', '--participant', default=1, type=int)
 parser.add_argument('-g', '--gpu', default='0')
-parser.add_argument('-d', '--delta', default=0.24, type=float)
-args = parser.parse_args([])
+parser.add_argument('-d', '--delta', default=0.35, type=float)
+args = parser.parse_args()
 print(args)
 
-logging.basicConfig(filename=args.model+'.csv',level=logging.DEBUG)
+logging.basicConfig(filename=args.model+'.csv',level=logging.INFO)
 
 os.environ["CUDA_DEVICE_ORDER"]="PCI_BUS_ID"
 os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu
@@ -39,6 +39,7 @@ np.set_printoptions(suppress=True)
 
 # %%
 from model import GAN
+from nfoldtest import Test
 from utils.visualize import fmriviz
 from utils.preprocess import dataloader, preprocess, postprocess
 
@@ -134,7 +135,7 @@ losses = ['binary_crossentropy', huber_loss(delta=args.delta)]
 loss_weights = [1e-2, 1]
 
 # %%
-def train(g_model, d_model, gan_model, dataset, latent_dim, idx, n_epochs=100, n_batch=2):
+def train(model_name, g_model, d_model, gan_model, dataset, latent_dim, idx, n_epochs=100, n_batch=2):
 	bat_per_epo = int(dataset[0].shape[0] / n_batch)
 	# half_batch = int(n_batch / 2)
 	# manually enumerate epochs
@@ -154,17 +155,21 @@ def train(g_model, d_model, gan_model, dataset, latent_dim, idx, n_epochs=100, n
 			if i % 10 == 0:
 				logging.info('>%d, %d/%d, d=%.3f, g=%.3f, %.3f' % (i+1, j+1, bat_per_epo, d_loss, g_loss[0], g_loss[1]))
 	# save the generator model
-	g_model.save(os.path.join('pretrained', args.model + '_fold' + str(idx) + '_p' + str(args.participant) + '.h5'))
+	g_model.save(os.path.join('pretrained', model_name + '.h5'))
 
 # %%
-kfold = KFold(2, True, 1)
 idx = 0
+kfold = KFold(5, True, 1)
+testobj = Test(snr, voxel_map, latent_dim)
+
 for train_idx, test_idx in kfold.split(Y):
 	dataset = [X[train_idx], Y[train_idx]]
 	g_model, d_model, gan_model = model.create(optimizer, losses, loss_weights)
 
-	train(g_model, d_model, gan_model, dataset, latent_dim, idx, args.epoch, args.batch)
-
+	model_name = args.model + '_fold' + str(idx) + '_p' + str(args.participant)
+	# train(model_name, g_model, d_model, gan_model, dataset, latent_dim, idx, args.epoch, args.batch)
+	testobj.predict_test(model_name, X, Y)
+	idx += 1
 
 #%%
 # from tensorflow.keras.utils import plot_model
