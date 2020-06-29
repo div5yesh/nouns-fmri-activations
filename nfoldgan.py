@@ -13,11 +13,14 @@ parser.add_argument('-m', '--model', default='model')
 parser.add_argument('-p', '--participant', default=1, type=int)
 parser.add_argument('-g', '--gpu', default='0')
 parser.add_argument('-d', '--delta', default=0.35, type=float)
+parser.add_argument('-f', '--folds', default=5, type=int)
+parser.add_argument('-t', '--train', dest='train', action='store_true')
 args = parser.parse_args()
 print(args)
 
 logging.basicConfig(filename=args.model+'.csv',level=logging.INFO)
 
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 os.environ["CUDA_DEVICE_ORDER"]="PCI_BUS_ID"
 os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu
 
@@ -159,16 +162,18 @@ def train(model_name, g_model, d_model, gan_model, dataset, latent_dim, idx, n_e
 
 # %%
 idx = 0
-kfold = KFold(5, True, 1)
+kfold = KFold(args.folds, True, 1)
 testobj = Test(snr, voxel_map, latent_dim)
 
 for train_idx, test_idx in kfold.split(Y):
-	dataset = [X[train_idx], Y[train_idx]]
-	g_model, d_model, gan_model = model.create(optimizer, losses, loss_weights)
-
 	model_name = args.model + '_fold' + str(idx) + '_p' + str(args.participant)
-	# train(model_name, g_model, d_model, gan_model, dataset, latent_dim, idx, args.epoch, args.batch)
-	testobj.predict_test(model_name, X, Y)
+	if args.train:
+		dataset = [X[train_idx], Y[train_idx]]
+		g_model, d_model, gan_model = model.create(optimizer, losses, loss_weights)
+		train(model_name, g_model, d_model, gan_model, dataset, latent_dim, idx, args.epoch, args.batch)
+	else:
+		dataset = [train_vectors[test_idx], Y[test_idx]]
+		testobj.predict_test(model_name, dataset)
 	idx += 1
 
 #%%

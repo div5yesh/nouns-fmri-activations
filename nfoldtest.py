@@ -30,6 +30,7 @@ class Test:
         self.snr = snr
         self.voxel_map = voxel_map
         self.latent_dim = latent_dim
+        self.n_voxels = voxel_map[0].shape[0]
 
     def generate_latent_points(self, latent_dim, n_samples):
         z_input = tf.random.normal((n_samples, latent_dim), mean=0.0, stddev=1.0, dtype=tf.dtypes.float32)
@@ -42,10 +43,12 @@ class Test:
             predictions += [vector]
         return np.array(predictions)
 
-    def evaluate(self, snr, combinations, predictions, true_images):
+    def evaluate(self, snr, combinations, predictions, dataset):
+        true_images, Y = dataset
         arr_similarity = []
         for pair in combinations:
             idx = list(pair)
+            # print(Y[idx])
             similarity = postprocess.evaluate(snr, predictions[idx], true_images[idx])
             arr_similarity += [similarity]
 
@@ -53,7 +56,8 @@ class Test:
         print('Match Metric: %f' % (accuracy))
         return np.array(arr_similarity)
 
-    def classic_eval(self, snr, predictions, true_images, top=500):
+    def classic_eval(self, snr, predictions, dataset, top=500):
+        true_images, Y = dataset
         arr_similarity = []
         for i in range(len(predictions)):
             similarity = postprocess.classic_eval(snr, predictions[i], true_images[i], 0.7, top)
@@ -63,12 +67,13 @@ class Test:
         print('Cosine Metric: %f' % (accuracy))
         return np.array(arr_similarity)
 
-    def predict_test(self, model_name, true_vectors, Y):
+    def predict_test(self, model_name, dataset):
+        Y = dataset[1]
         n_classes = len(Y)
         n_batch = int(n_classes / 2)
-        predictions = np.zeros((1,true_vectors.shape[1]))
+        predictions = np.zeros((1, self.n_voxels))
 
-        test_combinations = list(combinations(Y, 2))
+        test_combinations = list(combinations(range(n_classes), 2))
         latent_points = self.generate_latent_points(self.latent_dim, n_classes)
         model = load_model(os.path.join('pretrained', model_name + '.h5'))
 
@@ -81,10 +86,9 @@ class Test:
             predictions = np.concatenate((predictions, preds), axis=0)
 
         predictions = predictions[1:]
-        true_vecs = true_vectors[Y]
 
-        match_similarity = self.evaluate(self.snr, test_combinations, predictions, true_vecs)
-        cosine_similarity = self.classic_eval(self.snr, predictions, true_vecs)
+        match_similarity = self.evaluate(self.snr, test_combinations, predictions, dataset)
+        cosine_similarity = self.classic_eval(self.snr, predictions, dataset)
         return match_similarity, cosine_similarity
 
 #%%
