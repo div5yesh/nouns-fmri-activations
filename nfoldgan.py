@@ -62,21 +62,20 @@ def generate_real_samples(dataset, n_samples):
 	return [X, labels], y
 
 # generate points in latent space as input for the generator
-def generate_latent_points(latent_dim, n_samples, n_classes):
+def generate_latent_points(latent_dim, dataset, n_samples):
 	# generate points in the latent space
-	# x_input = randn(latent_dim * n_samples)
-	# reshape into a batch of inputs for the network
-	# z_input = x_input.reshape(n_samples, latent_dim)
+	images, labels = dataset
 	z_input = tf.random.normal((n_samples, latent_dim), mean=0.0, stddev=1.0, dtype=tf.dtypes.float32)
 	# generate labels
-	z_labels = randint(0, n_classes, n_samples)
+	ix = randint(0, images.shape[0], n_samples)
+	z_labels = labels[ix]
 	# z_labels = choice(classes, n_samples)
-	return z_input, z_labels
+	return z_input, z_labels, ix
  
 # use the generator to generate n fake examples, with class labels
-def generate_fake_samples(generator, latent_dim, n_samples, n_classes):
+def generate_fake_samples(generator, latent_dim, dataset, n_samples):
 	# generate points in latent space
-	z_input, z_labels = generate_latent_points(latent_dim, n_samples, n_classes)
+	z_input, z_labels, _ = generate_latent_points(latent_dim, dataset, n_samples)
 	# predict outputs
 	images = generator.predict([z_input, z_labels])
 	# create class labels
@@ -138,7 +137,7 @@ losses = ['binary_crossentropy', huber_loss(delta=args.delta)]
 loss_weights = [1e-2, 1]
 
 # %%
-def train(model_name, g_model, d_model, gan_model, dataset, latent_dim, idx, n_epochs=100, n_batch=2):
+def train(model_name, g_model, d_model, gan_model, dataset, latent_dim, n_epochs=100, n_batch=2):
 	bat_per_epo = int(dataset[0].shape[0] / n_batch)
 	# half_batch = int(n_batch / 2)
 	# manually enumerate epochs
@@ -147,13 +146,13 @@ def train(model_name, g_model, d_model, gan_model, dataset, latent_dim, idx, n_e
 		for j in range(bat_per_epo):
 			# y_real = randint(7, 12, (n_batch, 1)) / 10
 			[X_real, labels_real], y_real = generate_real_samples(dataset, n_batch)
-			[X_fake, labels_fake], y_fake = generate_fake_samples(g_model, latent_dim, n_batch, dataset[0].shape[0])
+			[X_fake, labels_fake], y_fake = generate_fake_samples(g_model, latent_dim, dataset, n_batch)
 
 			d_loss, _ = d_model.train_on_batch([X_real, X_fake, labels_real, labels_fake], y_real)
 
-			z_input, z_labels = generate_latent_points(latent_dim, n_batch, dataset[0].shape[0])
+			z_input, z_labels, ix = generate_latent_points(latent_dim, dataset, n_batch)
 
-			g_loss = gan_model.train_on_batch([dataset[0][z_labels], z_input, z_labels, z_labels], [y_fake, dataset[0][z_labels]])
+			g_loss = gan_model.train_on_batch([dataset[0][ix], z_input, z_labels, z_labels], [y_fake, dataset[0][ix]])
 			
 			if i % 10 == 0:
 				logging.info('>%d, %d/%d, d=%.3f, g=%.3f, %.3f' % (i+1, j+1, bat_per_epo, d_loss, g_loss[0], g_loss[1]))
@@ -170,7 +169,7 @@ for train_idx, test_idx in kfold.split(Y):
 	if args.train:
 		dataset = [X[train_idx], Y[train_idx]]
 		g_model, d_model, gan_model = model.create(optimizer, losses, loss_weights)
-		train(model_name, g_model, d_model, gan_model, dataset, latent_dim, idx, args.epoch, args.batch)
+		train(model_name, g_model, d_model, gan_model, dataset, latent_dim, args.epoch, args.batch)
 	else:
 		dataset = [train_vectors[test_idx], Y[test_idx]]
 		testobj.predict_test(model_name, dataset)
