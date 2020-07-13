@@ -44,12 +44,12 @@ class Test:
         return np.array(predictions)
 
     def evaluate(self, snr, combinations, predictions, dataset):
-        true_images, Y = dataset
+        true_vectors = dataset
         arr_similarity = []
         for pair in combinations:
             idx = list(pair)
             # print(Y[idx])
-            similarity = postprocess.evaluate(snr, predictions[idx], true_images[idx])
+            similarity = postprocess.evaluate(snr, predictions[idx], true_vectors[idx])
             arr_similarity += [similarity]
 
         accuracy = np.mean(arr_similarity)
@@ -57,7 +57,7 @@ class Test:
         return np.array(arr_similarity)
 
     def classic_eval(self, snr, predictions, dataset, top=500):
-        true_images, Y = dataset
+        true_images = dataset
         arr_similarity = []
         for i in range(len(predictions)):
             similarity = postprocess.classic_eval(snr, predictions[i], true_images[i], 0.7, top)
@@ -67,13 +67,11 @@ class Test:
         print('Cosine Metric: %f' % (accuracy))
         return np.array(arr_similarity)
 
-    def predict_test(self, model_name, dataset):
-        Y = dataset[1]
+    def predict(self, model_name, Y):
         n_classes = len(Y)
         n_batch = int(n_classes / 2)
         predictions = np.zeros((1, self.n_voxels))
 
-        test_combinations = list(combinations(range(n_classes), 2))
         latent_points = self.generate_latent_points(self.latent_dim, n_classes)
         model = load_model(os.path.join('pretrained', model_name + '.h5'))
 
@@ -86,9 +84,13 @@ class Test:
             predictions = np.concatenate((predictions, preds), axis=0)
 
         predictions = predictions[1:]
-
-        match_similarity = self.evaluate(self.snr, test_combinations, predictions, dataset)
-        cosine_similarity = self.classic_eval(self.snr, predictions, dataset)
+        return predictions
+    
+    def test(self, predictions, vectors):
+        n_classes = len(vectors)
+        test_combinations = list(combinations(range(n_classes), 2))
+        match_similarity = self.evaluate(self.snr, test_combinations, predictions, vectors)
+        cosine_similarity = self.classic_eval(self.snr, predictions, vectors)
         return match_similarity, cosine_similarity
 
 #%%

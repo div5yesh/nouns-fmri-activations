@@ -15,6 +15,7 @@ parser.add_argument('-g', '--gpu', default='0')
 parser.add_argument('-d', '--delta', default=0.35, type=float)
 parser.add_argument('-f', '--folds', default=5, type=int)
 parser.add_argument('-t', '--train', dest='train', action='store_true')
+# args = parser.parse_args(['-m','model_5fold15k'])
 args = parser.parse_args()
 print(args)
 
@@ -123,8 +124,8 @@ lencoder = preprocessing.LabelEncoder()
 Y = lencoder.fit_transform(nouns)
 
 #%%
-train_vectors, embeddings = preprocess.prepare_data(features,trial_map,samples,nouns)
-X = prepare_images(train_vectors,voxel_map)
+train_vectors, embeddings = preprocess.prepare_data(features, trial_map, samples, nouns)
+X = prepare_images(train_vectors, voxel_map)
 snr = preprocess.get_snr(participant, samples, trial_map)
 snr_img = fmriviz.prepare_image(snr, voxel_map)
 
@@ -164,6 +165,7 @@ idx = 0
 kfold = KFold(args.folds, True, 1)
 testobj = Test(snr, voxel_map, latent_dim)
 
+predictions = np.zeros((1, samples.shape[1]))
 for train_idx, test_idx in kfold.split(Y):
 	model_name = args.model + '_fold' + str(idx) + '_p' + str(args.participant)
 	if args.train:
@@ -172,10 +174,17 @@ for train_idx, test_idx in kfold.split(Y):
 		train(model_name, g_model, d_model, gan_model, dataset, latent_dim, args.epoch, args.batch)
 	else:
 		dataset = [train_vectors[test_idx], Y[test_idx]]
-		testobj.predict_test(model_name, dataset)
+		predX = testobj.predict(model_name, dataset[1])
+		predictions = np.concatenate((predictions, predX), axis=0)
 	idx += 1
+
+if not args.train:
+	predictions = predictions[1:]
+	testobj.test(predictions, train_vectors)
 
 #%%
 # from tensorflow.keras.utils import plot_model
-# plot_model(dis_model, to_file="dis.png", show_shapes=True)
+# plot_model(d_model, to_file="dis.png", show_shapes=True)
 # plot_model(gen_model, to_file="gen.png", show_shapes=True)
+
+# %%

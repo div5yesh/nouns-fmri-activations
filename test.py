@@ -10,8 +10,8 @@ parser = argparse.ArgumentParser()
 parser.add_argument('-m', '--model', default='model')
 parser.add_argument('-p', '--participant', default=1, type=int)
 parser.add_argument('-g', '--gpu', default='0')
-parser.add_argument('-r', '--rep', default=1, type=int)
-args = parser.parse_args(['-m','model_less_rtlhb_p1','-r','1','-p','1'])
+# args = parser.parse_args(['-m','model_less_rtlhb_p1','-r','1','-p','1'])
+args = parser.parse_args()
 print(args)
 
 os.environ["CUDA_DEVICE_ORDER"]="PCI_BUS_ID"
@@ -35,8 +35,8 @@ from utils.preprocess import dataloader, preprocess, postprocess
 def generate_latent_points(latent_dim, n_samples, n_classes=60):
 	z_input = tf.random.normal((n_samples, latent_dim), mean=0.0, stddev=1.0, dtype=tf.dtypes.float32)
 	# generate labels
-	labels = randint(0, n_classes, n_samples)
-	return [z_input, labels]
+	ix = randint(0, n_classes, n_samples)
+	return [z_input, ix]
 
 # def prepare_images(vecs, voxel_map):
 # 	images = []
@@ -99,36 +99,28 @@ model = load_model(os.path.join('pretrained', args.model + '.h5'))
 
 #%%----------------------------------------test------------------------------------------
 test_combinations = list(combinations(Y, 2))
-arr_accuracy = []
+predictions = np.zeros((1,samples.shape[1]))
+latent_points, _ = generate_latent_points(1000, len(Y))
 
-for i in range(args.rep):
-	predictions = np.zeros((1,samples.shape[1]))
-	latent_points, _ = generate_latent_points(1000, len(Y))
+for i in range(6):
+    start = i * 10
+    end = (i + 1) * 10
+    X  = model.predict([latent_points[start:end], Y[start:end]])
+    fake_image = X[:,:,:,:,0]
+    preds = transform_fake_images(fake_image, voxel_map)
+    predictions = np.concatenate((predictions, preds), axis=0)
 
-	for i in range(6):
-		start = i * 10
-		end = (i + 1) * 10
-		X  = model.predict([latent_points[start:end], Y[start:end]])
-		fake_image = X[:,:,:,:,0]
-		preds = transform_fake_images(fake_image, voxel_map)
-		predictions = np.concatenate((predictions, preds), axis=0)
+predictions = predictions[1:]
+true_vecs = train_vectors
 
-	predictions = predictions[1:]
-	true_vecs = train_vectors[Y]
-
-	arr_similarity = test(snr, test_combinations, predictions, true_vecs)
-	accuracy = np.mean(arr_similarity)
-	print('Accuracy: %f' % (accuracy))
-	arr_accuracy += [accuracy]
-
-arr_accuracy = np.array(arr_accuracy)
-mean = np.mean(arr_accuracy)
-print('Mean Accuracy: %f' % (mean))
+arr_similarity = test(snr, test_combinations, predictions, true_vecs)
+accuracy = np.mean(arr_similarity)
+print('Accuracy: %f' % (accuracy))
 
 temp = cl_eval(snr, predictions, true_vecs)
 
 # %% --------------------------------main plots-------------------------------------------------------------------
-sample_idx = 5
+sample_idx = 15
 # vmin = np.min(predictions[sample_idx])/2
 # vmax = np.max(predictions[sample_idx])/2
 vmin = np.min(true_vecs[sample_idx])
@@ -149,12 +141,12 @@ fmriviz.plot_slices(theimg, vmin, vmax)
 # theimg = fmriviz.prepare_image(binary, voxel_map, fill=-1)
 # fmriviz.plot_slices(theimg, -1, 1, cmap='gray_r')
 
-tvox = postprocess.get_top_voxels(snr, 500)
-binary = np.full(true_vecs[0].shape, -0.2)
-binary[tvox] = 1
+# tvox = postprocess.get_top_voxels(snr, 500)
+# binary = np.full(true_vecs[0].shape, -0.2)
+# binary[tvox] = 1
 
-theimg = fmriviz.prepare_image(binary, voxel_map, fill=-1)
-fmriviz.plot_slices(theimg, -1, 1, cmap='gray_r')
+# theimg = fmriviz.prepare_image(binary, voxel_map, fill=-1)
+# fmriviz.plot_slices(theimg, -1, 1, cmap='gray_r')
 
 # tvox = postprocess.get_top_voxels(true_vecs[0], 500)
 # binary = np.full(true_vecs[0].shape, -0.2)

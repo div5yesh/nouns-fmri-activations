@@ -13,7 +13,7 @@ parser.add_argument('-e', '--epoch', default=1000, type=int)
 parser.add_argument('-m', '--model', default='model')
 parser.add_argument('-p', '--participant', default=1, type=int)
 parser.add_argument('-g', '--gpu', default='0')
-parser.add_argument('-d', '--delta', default=0.24, type=float)
+parser.add_argument('-d', '--delta', default=0.35, type=float)
 args = parser.parse_args()
 print(args)
 
@@ -153,13 +153,15 @@ def generate_latent_points(latent_dim, n_samples, n_classes=60):
 	# z_input = x_input.reshape(n_samples, latent_dim)
 	z_input = tf.random.normal((n_samples, latent_dim), mean=0.0, stddev=1.0, dtype=tf.dtypes.float32)
 	# generate labels
-	z_labels = randint(0, n_classes, n_samples)
-	return z_input, z_labels
+	ix = randint(0, n_classes, n_samples)
+	return z_input, ix
  
 # use the generator to generate n fake examples, with class labels
-def generate_fake_samples(generator, latent_dim, n_samples):
+def generate_fake_samples(generator, latent_dim, n_samples, dataset):
 	# generate points in latent space
-	z_input, z_labels = generate_latent_points(latent_dim, n_samples)
+	images, labels = dataset
+	z_input, ix = generate_latent_points(latent_dim, n_samples, images.shape[0])
+	z_labels = labels[ix]
 	# predict outputs
 	images = generator.predict([z_input, z_labels])
 	# create class labels
@@ -261,6 +263,7 @@ gen_model.compile(loss=['binary_crossentropy', huber_loss(delta=args.delta)], lo
 # %%
 def train(g_model, dis_model, gen_model, dataset, latent_dim, n_epochs=100, n_batch=2):
 	bat_per_epo = int(dataset[0].shape[0] / n_batch)
+	images, labels = dataset
 	# half_batch = int(n_batch / 2)
 	# manually enumerate epochs
 	for i in range(n_epochs):
@@ -268,14 +271,14 @@ def train(g_model, dis_model, gen_model, dataset, latent_dim, n_epochs=100, n_ba
 		for j in range(bat_per_epo):
 			# y_real = randint(7, 12, (n_batch, 1)) / 10
 			[X_real, labels_real], y_real = generate_real_samples(dataset, n_batch)
-			[X_fake, labels_fake], y_fake = generate_fake_samples(g_model, latent_dim, n_batch)
+			[X_fake, labels_fake], y_fake = generate_fake_samples(g_model, latent_dim, n_batch, dataset)
 
 			d_loss, _ = dis_model.train_on_batch([X_real, X_fake, labels_real, labels_fake], y_real)
 
-			z_input, z_labels = generate_latent_points(latent_dim, n_batch)
+			z_input, ix = generate_latent_points(latent_dim, n_batch, images.shape[0])
 			# y_fake = randint(0, 3, (n_batch, 1)) / 10
-
-			g_loss = gen_model.train_on_batch([dataset[0][z_labels], z_input, z_labels, z_labels], [y_fake, dataset[0][z_labels]])
+			z_labels = labels[ix]
+			g_loss = gen_model.train_on_batch([images[ix], z_input, z_labels, z_labels], [y_fake, images[ix]])
 			
 			print('>%d, %d/%d, d=%.3f, g=%.3f, %.3f' % (i+1, j+1, bat_per_epo, d_loss, g_loss[0], g_loss[1]))
 	# save the generator model
