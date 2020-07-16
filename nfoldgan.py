@@ -13,7 +13,7 @@ parser.add_argument('-m', '--model', default='model')
 parser.add_argument('-p', '--participant', default=1, type=int)
 parser.add_argument('-g', '--gpu', default='0')
 parser.add_argument('-d', '--delta', default=0.35, type=float)
-parser.add_argument('-f', '--folds', default=5, type=int)
+parser.add_argument('-f', '--folds', default=0, type=int)
 parser.add_argument('-t', '--train', dest='train', action='store_true')
 # args = parser.parse_args(['-m','model_5fold15k'])
 args = parser.parse_args()
@@ -29,7 +29,6 @@ os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu
 import numpy as np
 from numpy import expand_dims
 from numpy import zeros, ones, ones_like
-from numpy.random import randn, randint, choice
 from numpy import asarray
 import tensorflow as tf
 from tensorflow.keras.models import load_model
@@ -42,48 +41,12 @@ from sklearn.model_selection import KFold
 np.set_printoptions(suppress=True)
 
 # %%
-from model import GAN
+from model import SRGAN as GANModel
 from nfoldtest import Test
 from utils.visualize import fmriviz
 from utils.preprocess import dataloader, preprocess, postprocess
 
 # %%
-# select real samples
-def generate_real_samples(dataset, n_samples):
-	# split into images and labels
-	images, labels = dataset
-	# choose random instances
-	# ix = choice(classes, n_samples)
-	ix = randint(0, images.shape[0], n_samples)
-	# select images and labels
-	X, labels = images[ix], labels[ix]
-	# generate class labels
-	# y = ones((n_samples, 1))
-	y = randint(7, 12, (n_samples, 1)) / 10
-	return [X, labels], y
-
-# generate points in latent space as input for the generator
-def generate_latent_points(latent_dim, dataset, n_samples):
-	# generate points in the latent space
-	images, labels = dataset
-	z_input = tf.random.normal((n_samples, latent_dim), mean=0.0, stddev=1.0, dtype=tf.dtypes.float32)
-	# generate labels
-	ix = randint(0, images.shape[0], n_samples)
-	z_labels = labels[ix]
-	# z_labels = choice(classes, n_samples)
-	return z_input, z_labels, ix
- 
-# use the generator to generate n fake examples, with class labels
-def generate_fake_samples(generator, latent_dim, dataset, n_samples):
-	# generate points in latent space
-	z_input, z_labels, _ = generate_latent_points(latent_dim, dataset, n_samples)
-	# predict outputs
-	images = generator.predict([z_input, z_labels])
-	# create class labels
-	# y = zeros((n_samples, 1))
-	y = randint(0, 3, (n_samples, 1)) / 10
-	return [images , z_labels], y
-
 def prepare_images(vecs, voxel_map):
 	images = []
 	for raw in vecs:
@@ -129,54 +92,61 @@ X = prepare_images(train_vectors, voxel_map)
 snr = preprocess.get_snr(participant, samples, trial_map)
 snr_img = fmriviz.prepare_image(snr, voxel_map)
 
-#%% size of the latent space
-latent_dim = 1000
+#%%
 # dataset = np.array([X, Y])
-model = GAN(embeddings, latent_dim)
+model_factory = GANModel(logging, embeddings, latent_dim=1000)
 optimizer = Adam(lr=0.0002, beta_1=0.5)
-losses = ['binary_crossentropy', huber_loss(delta=args.delta)]
-loss_weights = [1e-2, 1]
 
-# %%
-def train(model_name, g_model, d_model, gan_model, dataset, latent_dim, n_epochs=100, n_batch=2):
-	bat_per_epo = int(dataset[0].shape[0] / n_batch)
-	# half_batch = int(n_batch / 2)
-	# manually enumerate epochs
-	for i in range(n_epochs):
-		# enumerate batches over the training set
-		for j in range(bat_per_epo):
-			# y_real = randint(7, 12, (n_batch, 1)) / 10
-			[X_real, labels_real], y_real = generate_real_samples(dataset, n_batch)
-			[X_fake, labels_fake], y_fake = generate_fake_samples(g_model, latent_dim, dataset, n_batch)
+#CGAN
+# loss_weights = [1]
+# losses = ['binary_crossentropy']
 
-			d_loss, _ = d_model.train_on_batch([X_real, X_fake, labels_real, labels_fake], y_real)
+#CGAN HL High
+# losses = ['binary_crossentropy', huber_loss(delta=args.delta)]
+# loss_weights = [1e-3, 1]
 
-			z_input, z_labels, ix = generate_latent_points(latent_dim, dataset, n_batch)
+# #CGAN HL Low
+# losses = ['binary_crossentropy', huber_loss(delta=args.delta)]
+# loss_weights = [1e-2, 1]
 
-			g_loss = gan_model.train_on_batch([dataset[0][ix], z_input, z_labels, z_labels], [y_fake, dataset[0][ix]])
-			
-			if i % 10 == 0:
-				logging.info('>%d, %d/%d, d=%.3f, g=%.3f, %.3f' % (i+1, j+1, bat_per_epo, d_loss, g_loss[0], g_loss[1]))
-	# save the generator model
-	g_model.save(os.path.join('pretrained', model_name + '.h5'))
+# #CGAN PL High
+# losses = ['binary_crossentropy', perceptual_loss]
+# loss_weights = [1e-3, 1]
+
+# #CGAN PL Low
+# losses = ['binary_crossentropy', perceptual_loss]
+# loss_weights = [1e-2, 1]
+
+# logging.info('***********************Hyper-Parameters: ' + str(losses) + ", " + str(loss_weights))
 
 # %%
 idx = 0
-kfold = KFold(args.folds, True, 1)
-testobj = Test(snr, voxel_map, latent_dim)
-
 predictions = np.zeros((1, samples.shape[1]))
-for train_idx, test_idx in kfold.split(Y):
-	model_name = args.model + '_fold' + str(idx) + '_p' + str(args.participant)
+testobj = Test(snr, voxel_map, latent_dim=1000)
+
+if args.folds:
+	kfold = KFold(args.folds, True, 1)
+	for train_idx, test_idx in kfold.split(Y):
+		model_name = args.model + '_fold' + str(idx) + '_p' + str(args.participant)
+		if args.train:
+			dataset = [X[train_idx], Y[train_idx]]
+			g_model, d_model, gan_model = model_factory.create(optimizer, losses, loss_weights)
+			model_factory.train(model_name, g_model, d_model, gan_model, dataset, args.epoch, args.batch)
+		else:
+			dataset = [train_vectors[test_idx], Y[test_idx]]
+			predX = testobj.predict(model_name, dataset[1])
+			predictions = np.concatenate((predictions, predX), axis=0)
+		idx += 1
+else:
+	model_name = args.model + '_p' + str(args.participant)
 	if args.train:
-		dataset = [X[train_idx], Y[train_idx]]
-		g_model, d_model, gan_model = model.create(optimizer, losses, loss_weights)
-		train(model_name, g_model, d_model, gan_model, dataset, latent_dim, args.epoch, args.batch)
+		dataset = [X, Y]
+		g_model, d_model, gan_model = model_factory.create(optimizer, losses, loss_weights)
+		model_factory.train(model_name, g_model, d_model, gan_model, dataset, args.epoch, args.batch)
 	else:
-		dataset = [train_vectors[test_idx], Y[test_idx]]
+		dataset = [train_vectors, Y]
 		predX = testobj.predict(model_name, dataset[1])
-		predictions = np.concatenate((predictions, predX), axis=0)
-	idx += 1
+		predictions = np.concatenate((predictions, predX), axis=0)	
 
 if not args.train:
 	predictions = predictions[1:]
