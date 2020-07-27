@@ -120,13 +120,17 @@ optimizer = Adam(lr=0.0002, beta_1=0.5)
 # logging.info('***********************Hyper-Parameters: ' + str(losses) + ", " + str(loss_weights))
 
 # %%
-idx = 0
+idx = -1
 predictions = np.zeros((1, samples.shape[1]))
 testobj = Test(snr, voxel_map, latent_dim=1000)
 
 if args.folds:
 	kfold = KFold(args.folds, True, 1)
-	for train_idx, test_idx in kfold.split(Y):
+	for train_idx, test_idx in kfold.split(range(60)):
+		idx += 1
+		# logging.info(train_idx +"; "+ test_idx +"; + idx)
+		# if idx < 27:
+		# 	continue
 		model_name = args.model + '_fold' + str(idx) + '_p' + str(args.participant)
 		if args.train:
 			dataset = [X[train_idx], Y[train_idx]]
@@ -136,7 +140,7 @@ if args.folds:
 			dataset = [train_vectors[test_idx], Y[test_idx]]
 			predX = testobj.predict(model_name, dataset[1])
 			predictions = np.concatenate((predictions, predX), axis=0)
-		idx += 1
+		
 else:
 	model_name = args.model + '_p' + str(args.participant)
 	if args.train:

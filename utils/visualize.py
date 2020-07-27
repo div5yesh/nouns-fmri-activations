@@ -27,11 +27,16 @@ class Visualization:
     #         if voxel < len(data): fmri_image[x][y][z] = data[voxel]     #?????
     #     return fmri_image
 
-    def show_slices(self, fmri_image, vmin,vmax, filename, axis=2):
-        shape = fmri_image.shape
+    def show_slices(self, fmri_image, vmin,vmax, filename, slice=-1):
         norm = colors.DivergingNorm(vmin=vmin, vcenter=0., vmax=vmax)
-        for i in range(shape[axis]):
-            plt.imshow(fmri_image[:,:,i].T, cmap="jet", norm=norm)
+        if slice == -1:
+            shape = fmri_image.shape
+            for i in range(shape[2]):
+                plt.imshow(fmri_image[:,:,i].T, cmap="jet", norm=norm)
+                plt.savefig("%s.pdf" % (filename + str(i)), bbox_inches = 'tight', pad_inches=0)
+                plt.show()
+        else:
+            plt.imshow(fmri_image[:,:,slice].T, cmap="jet", norm=norm)
             plt.savefig("%s.pdf" % (filename + str(i)), bbox_inches = 'tight', pad_inches=0)
             plt.show()
 

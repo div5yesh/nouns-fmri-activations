@@ -90,8 +90,9 @@ class Test:
         n_classes = len(vectors)
         test_combinations = list(combinations(range(n_classes), 2))
         match_similarity = self.evaluate(self.snr, test_combinations, predictions, vectors)
-        cosine_similarity = self.classic_eval(self.snr, predictions, vectors)
-        return match_similarity, cosine_similarity
+        cosine_500 = self.classic_eval(self.snr, predictions, vectors)
+        cosine_similarity = self.classic_eval(self.snr, predictions, vectors, -1)
+        return match_similarity, cosine_500, cosine_similarity
 
 #%%
 # participant = args.participant
